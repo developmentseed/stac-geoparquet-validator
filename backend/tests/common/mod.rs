@@ -42,7 +42,8 @@ fn data_asset_fields() -> Fields {
     ])
 }
 
-fn wkb_point(x: f64, y: f64) -> Vec<u8> {
+/// Encodes a little-endian 2D WKB point.
+pub fn wkb_point(x: f64, y: f64) -> Vec<u8> {
     let mut bytes = vec![1u8, 1, 0, 0, 0];
     bytes.extend_from_slice(&x.to_le_bytes());
     bytes.extend_from_slice(&y.to_le_bytes());
@@ -295,4 +296,82 @@ impl Fixture {
         writer.close().unwrap();
         Bytes::from(buffer)
     }
+}
+
+/// Encodes a little-endian 2D WKB polygon with a single ring.
+pub fn wkb_polygon(ring: &[(f64, f64)]) -> Vec<u8> {
+    let mut bytes = vec![1u8, 3, 0, 0, 0];
+    bytes.extend_from_slice(&1u32.to_le_bytes());
+    bytes.extend_from_slice(&(ring.len() as u32).to_le_bytes());
+    for (x, y) in ring {
+        bytes.extend_from_slice(&x.to_le_bytes());
+        bytes.extend_from_slice(&y.to_le_bytes());
+    }
+    bytes
+}
+
+/// Writer properties with zstd compression and at most `rows` rows per row group.
+pub fn row_group_props(rows: usize) -> WriterProperties {
+    WriterProperties::builder()
+        .set_compression(Compression::ZSTD(ZstdLevel::default()))
+        .set_max_row_group_row_count(Some(rows))
+        .build()
+}
+
+/// Replaces the named column with `array`, keeping the field's name and nullability.
+pub fn with_column(batch: &RecordBatch, name: &str, array: ArrayRef) -> RecordBatch {
+    let schema = batch.schema();
+    let index = schema.index_of(name).unwrap();
+    let mut fields: Vec<Field> = schema
+        .fields()
+        .iter()
+        .map(|field| field.as_ref().clone())
+        .collect();
+    fields[index] = Field::new(name, array.data_type().clone(), true);
+    let mut columns = batch.columns().to_vec();
+    columns[index] = array;
+    RecordBatch::try_new(Arc::new(Schema::new(fields)), columns).unwrap()
+}
+
+/// Replaces the `geometry` and `bbox` columns with the given points.
+pub fn with_points(batch: &RecordBatch, points: &[(f64, f64)]) -> RecordBatch {
+    let xs: Vec<f64> = points.iter().map(|(x, _)| *x).collect();
+    let ys: Vec<f64> = points.iter().map(|(_, y)| *y).collect();
+    let geometry = BinaryArray::from_iter_values(points.iter().map(|(x, y)| wkb_point(*x, *y)));
+    let bbox = StructArray::new(
+        bbox_fields(),
+        vec![
+            Arc::new(Float64Array::from(xs.clone())) as ArrayRef,
+            Arc::new(Float64Array::from(ys.clone())),
+            Arc::new(Float64Array::from(xs)),
+            Arc::new(Float64Array::from(ys)),
+        ],
+        None,
+    );
+    let batch = with_column(batch, "geometry", Arc::new(geometry));
+    with_column(&batch, "bbox", Arc::new(bbox))
+}
+
+/// Returns `n` deterministic pseudo-random points spread over the whole world.
+pub fn scattered_points(n: usize) -> Vec<(f64, f64)> {
+    let mut state: u64 = 0x2545_f491_4f6c_dd1d;
+    let mut next = move || {
+        state = state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        (state >> 11) as f64 / (1u64 << 53) as f64
+    };
+    (0..n)
+        .map(|_| (-180.0 + 360.0 * next(), -90.0 + 180.0 * next()))
+        .collect()
+}
+
+/// Replaces the `id` and `collection` columns.
+pub fn with_ids(batch: &RecordBatch, ids: Vec<String>, collections: Vec<String>) -> RecordBatch {
+    let batch = with_column(batch, "id", Arc::new(StringArray::from(ids)));
+    with_column(
+        &batch,
+        "collection",
+        Arc::new(StringArray::from(collections)),
+    )
 }

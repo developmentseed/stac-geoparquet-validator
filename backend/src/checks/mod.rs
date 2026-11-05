@@ -1,11 +1,14 @@
 //! Validation checks.
 
 mod best_practices;
+mod data;
 mod geoparquet;
 mod parquet;
 mod stac;
 
 use crate::{Context, Finding};
+
+pub use data::data_checks;
 
 /// A check that only needs the file footer.
 pub type Check = fn(&Context) -> Vec<Finding>;
