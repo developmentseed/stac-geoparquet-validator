@@ -51,6 +51,7 @@ export class ValidatorStack extends Stack {
     const functionProps = {
       architecture: lambda.Architecture.ARM_64,
       memorySize: 1024,
+      reservedConcurrentExecutions: 25,
       timeout: Duration.seconds(29),
       environment: { UPLOADS_BUCKET: uploads.bucketName },
     };

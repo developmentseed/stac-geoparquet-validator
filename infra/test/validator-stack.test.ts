@@ -49,6 +49,12 @@ describe("ValidatorStack", () => {
     });
   });
 
+  test("lambda has reserved concurrency", () => {
+    template.hasResourceProperties("AWS::Lambda::Function", {
+      ReservedConcurrentExecutions: 25,
+    });
+  });
+
   test("lambda has 29s timeout and UPLOADS_BUCKET env", () => {
     template.hasResourceProperties("AWS::Lambda::Function", {
       Timeout: 29,
