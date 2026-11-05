@@ -29,6 +29,8 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
+      - name: Enable corepack
+        run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -52,6 +54,8 @@ jobs:
         working-directory: infra
     steps:
       - uses: actions/checkout@v4
+      - name: Enable corepack
+        run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 20

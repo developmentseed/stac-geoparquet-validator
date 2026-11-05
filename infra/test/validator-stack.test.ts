@@ -98,4 +98,16 @@ describe("ValidatorStack", () => {
       }),
     });
   });
+
+  test("spa fallback is a default-behavior function, not error responses", () => {
+    const [distribution] = Object.values(
+      template.findResources("AWS::CloudFront::Distribution"),
+    );
+    const config = distribution.Properties.DistributionConfig;
+    expect(config.CustomErrorResponses).toBeUndefined();
+    expect(config.DefaultCacheBehavior.FunctionAssociations).toMatchObject([
+      { EventType: "viewer-request" },
+    ]);
+    expect(config.CacheBehaviors[0].FunctionAssociations).toBeUndefined();
+  });
 });

@@ -105,6 +105,16 @@ export class ValidatorStack extends Stack {
       `${api.apiId}.execute-api.${this.region}.amazonaws.com`,
       { protocolPolicy: cloudfront.OriginProtocolPolicy.HTTPS_ONLY },
     );
+    const spaRewrite = new cloudfront.Function(this, "SpaRewrite", {
+      runtime: cloudfront.FunctionRuntime.JS_2_0,
+      code: cloudfront.FunctionCode.fromInline(`function handler(event) {
+  var request = event.request;
+  if (request.uri.indexOf(".") === -1 || request.uri.endsWith("/")) {
+    request.uri = "/index.html";
+  }
+  return request;
+}`),
+    });
     const distribution = new cloudfront.Distribution(this, "Distribution", {
       defaultRootObject: "index.html",
       domainNames: [DOMAIN_NAME],
@@ -112,6 +122,12 @@ export class ValidatorStack extends Stack {
       defaultBehavior: {
         origin: origins.S3BucketOrigin.withOriginAccessControl(site),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        functionAssociations: [
+          {
+            function: spaRewrite,
+            eventType: cloudfront.FunctionEventType.VIEWER_REQUEST,
+          },
+        ],
       },
       additionalBehaviors: {
         "/api/*": {
@@ -123,12 +139,6 @@ export class ValidatorStack extends Stack {
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.HTTPS_ONLY,
         },
       },
-      errorResponses: [403, 404].map((httpStatus) => ({
-        httpStatus,
-        responseHttpStatus: 200,
-        responsePagePath: "/index.html",
-        ttl: Duration.seconds(0),
-      })),
     });
 
     new s3deploy.BucketDeployment(this, "SiteDeployment", {
