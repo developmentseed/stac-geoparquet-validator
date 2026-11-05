@@ -191,6 +191,20 @@ pub(super) fn columns(context: &Context) -> Vec<Finding> {
     findings
 }
 
+/// Checks that the file has `geo` metadata, which stac-geoparquet requires even when the
+/// geometry uses native Parquet geospatial types.
+pub(super) fn geoparquet_metadata(context: &Context) -> Vec<Finding> {
+    if context.key_value.contains_key("geo") {
+        return Vec::new();
+    }
+    vec![error(
+        "stac.geoparquet_metadata_missing",
+        "stac-geoparquet files must be valid GeoParquet with `geo` metadata, but the file has none"
+            .to_string(),
+        REF_GUIDELINES,
+    )]
+}
+
 /// Checks that the `geometry` column's CRS is OGC:CRS84.
 pub(super) fn crs(context: &Context) -> Vec<Finding> {
     if context.arrow_schema.field_with_name("geometry").is_err() {

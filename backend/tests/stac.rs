@@ -214,3 +214,25 @@ async fn utm_crs() {
     let findings = findings(&fixture).await;
     assert!(has(&findings, "stac.crs"));
 }
+
+#[tokio::test]
+async fn native_without_geo_metadata_is_not_stac_geoparquet() {
+    let mut fixture = Fixture::valid();
+    fixture.native = true;
+    fixture.set_geo(None);
+    let report = validate_bytes(fixture.bytes(), "test.parquet").await;
+    let finding = report
+        .findings
+        .iter()
+        .find(|finding| finding.id == "stac.geoparquet_metadata_missing")
+        .unwrap();
+    assert_eq!(finding.severity, Severity::Error);
+    assert!(has(&report.findings, "geoparquet.native_without_metadata"));
+    assert!(!report.summary.stac_geoparquet_valid);
+}
+
+#[tokio::test]
+async fn geo_metadata_present_is_not_flagged() {
+    let findings = findings(&Fixture::valid()).await;
+    assert!(!has(&findings, "stac.geoparquet_metadata_missing"));
+}

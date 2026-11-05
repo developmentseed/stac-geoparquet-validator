@@ -25,6 +25,7 @@ pub fn footer_checks() -> Vec<Check> {
         best_practices::file_size,
         best_practices::extension,
         stac::columns,
+        stac::geoparquet_metadata,
         stac::crs,
         stac::metadata,
     ]
