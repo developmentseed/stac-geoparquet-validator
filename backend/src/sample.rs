@@ -16,6 +16,9 @@ use std::{collections::BTreeSet, sync::Arc, time::Instant};
 /// The maximum number of rows read into a sample.
 pub const MAX_ROWS: usize = 200_000;
 
+/// The maximum compressed size, in bytes, of the column chunks read into a sample.
+pub const MAX_BYTES: u64 = 128 * 1024 * 1024;
+
 const BATCH_SIZE: usize = 8192;
 
 /// Values read from the first rows of a file.
@@ -36,6 +39,8 @@ pub enum SampleError {
     Deadline,
     /// The rows could not be read.
     Read(String),
+    /// Even the first row group's sampled columns are larger than [`MAX_BYTES`].
+    TooLarge,
 }
 
 /// Returns the name of the primary geometry column: the `geo` primary column, else the
@@ -51,9 +56,26 @@ pub fn primary_geometry_column(ctx: &Context) -> Option<String> {
     }
 }
 
+/// Returns the `geometry_types` declared for the primary column in valid `geo` metadata,
+/// or `None` when there is no such metadata or the list is empty.
+pub fn declared_geometry_types(ctx: &Context) -> Option<BTreeSet<String>> {
+    let GeoState::Valid(metadata) = ctx.geo() else {
+        return None;
+    };
+    let declared: BTreeSet<String> = metadata
+        .columns
+        .get(&metadata.primary_column)?
+        .geometry_types
+        .iter()
+        .cloned()
+        .collect();
+    (!declared.is_empty()).then_some(declared)
+}
+
 impl Sample {
-    /// Reads `id`, `collection` and the primary geometry column from up to [`MAX_ROWS`]
-    /// rows, taking row groups in order.
+    /// Reads `id`, `collection` and, when [`declared_geometry_types`] is `Some`, the primary
+    /// geometry column from up to [`MAX_ROWS`] rows, taking row groups in order until the
+    /// sampled column chunks would exceed [`MAX_BYTES`].
     ///
     /// Returns `None` if the deadline passes or the rows cannot be read.
     pub async fn read(
@@ -72,11 +94,21 @@ impl Sample {
         ctx: &Context,
         deadline: Instant,
     ) -> Result<Sample, SampleError> {
+        Sample::try_read_with_budget(store, path, ctx, deadline, MAX_BYTES).await
+    }
+
+    pub(crate) async fn try_read_with_budget(
+        store: Arc<dyn ObjectStore>,
+        path: &Path,
+        ctx: &Context,
+        deadline: Instant,
+        max_bytes: u64,
+    ) -> Result<Sample, SampleError> {
         let remaining = deadline
             .checked_duration_since(Instant::now())
             .filter(|remaining| !remaining.is_zero())
             .ok_or(SampleError::Deadline)?;
-        tokio::time::timeout(remaining, read_rows(store, path, ctx, deadline))
+        tokio::time::timeout(remaining, read_rows(store, path, ctx, deadline, max_bytes))
             .await
             .map_err(|_| SampleError::Deadline)?
     }
@@ -87,8 +119,12 @@ async fn read_rows(
     path: &Path,
     ctx: &Context,
     deadline: Instant,
+    max_bytes: u64,
 ) -> Result<Sample, SampleError> {
-    let geometry = primary_geometry_column(ctx);
+    let geometry = declared_geometry_types(ctx)
+        .is_some()
+        .then(|| primary_geometry_column(ctx))
+        .flatten();
     let wanted = [Some("id"), Some("collection"), geometry.as_deref()];
     let schema = ctx.metadata.file_metadata().schema_descr();
     let roots: Vec<usize> = schema
@@ -99,10 +135,26 @@ async fn read_rows(
         .filter(|(_, field)| wanted.contains(&Some(field.name())))
         .map(|(index, _)| index)
         .collect();
+    let leaves: Vec<usize> = (0..schema.num_columns())
+        .filter(|leaf| roots.contains(&schema.get_column_root_idx(*leaf)))
+        .collect();
     let mut row_groups = Vec::new();
     let mut rows = 0usize;
+    let mut bytes = 0u64;
     for (index, row_group) in ctx.metadata.row_groups().iter().enumerate() {
         if rows >= MAX_ROWS {
+            break;
+        }
+        let size = leaves.iter().fold(0u64, |total, leaf| {
+            total.saturating_add(
+                u64::try_from(row_group.column(*leaf).compressed_size()).unwrap_or(u64::MAX),
+            )
+        });
+        bytes = bytes.saturating_add(size);
+        if bytes > max_bytes {
+            if row_groups.is_empty() {
+                return Err(SampleError::TooLarge);
+            }
             break;
         }
         row_groups.push(index);

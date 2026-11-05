@@ -9,6 +9,7 @@ use common::{
     with_column, with_ids, with_points, wkb_point, wkb_polygon,
 };
 use object_store::{ObjectStore, ObjectStoreExt, memory::InMemory, path::Path};
+use parquet::file::statistics::Statistics;
 use stac_geoparquet_validator::{Context, Finding, Section, Severity, checks};
 use std::{
     sync::Arc,
@@ -201,6 +202,41 @@ async fn id_prefix_unsorted_warns() {
     let finding = get(&findings, "stacbp.id_prefix");
     assert_eq!(finding.severity, Severity::Warning);
     assert_eq!(finding.section, Section::StacGeoparquetBestPractices);
+}
+
+#[tokio::test]
+async fn id_prefix_unsorted_with_truncated_statistics_warns() {
+    let mut fixture = multi_row_group(1000, 250);
+    fixture.props = row_group_props(250)
+        .into_builder()
+        .set_statistics_truncate_length(Some(8))
+        .build();
+    fixture.batch = with_ids(
+        &fixture.batch,
+        ids((0..1000).map(|i| (i * 7919) % 1000)),
+        vec!["test".to_string(); 1000],
+    );
+    let store: Arc<dyn ObjectStore> = Arc::new(InMemory::new());
+    let path = Path::from("test.parquet");
+    store.put(&path, fixture.bytes().into()).await.unwrap();
+    let context = Context::load(store, path.clone(), path.to_string())
+        .await
+        .unwrap();
+    let id = context
+        .metadata
+        .file_metadata()
+        .schema_descr()
+        .columns()
+        .iter()
+        .position(|column| column.name() == "id")
+        .unwrap();
+    let Some(Statistics::ByteArray(stats)) = context.metadata.row_group(0).column(id).statistics()
+    else {
+        panic!("expected byte array statistics");
+    };
+    assert!(!stats.min_is_exact() || !stats.max_is_exact());
+    let findings = findings(&fixture).await;
+    assert!(has(&findings, "stacbp.id_prefix"), "{findings:?}");
 }
 
 #[tokio::test]

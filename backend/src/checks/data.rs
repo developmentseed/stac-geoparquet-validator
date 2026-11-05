@@ -32,7 +32,11 @@ pub struct Extent {
     pub bbox: Option<[f64; 4]>,
     /// The `(min, max)` time in microseconds since the epoch.
     pub time: Option<(i64, i64)>,
-    /// The `(min, max)` id, only when both statistics are exact (not truncated).
+    /// The `(min, max)` id from statistics.
+    ///
+    /// Truncated statistics are still used: a truncated min is a lower bound and a truncated
+    /// max is an upper bound, so an overlap between row groups is never missed, though a
+    /// truncated bound may report an overlap that exact values would not.
     pub id: Option<(String, String)>,
 }
 
@@ -40,12 +44,23 @@ pub struct Extent {
 ///
 /// `stacbp.hive_partitioning` and the statistics-based ordering checks always run. The
 /// sampled checks (`stac.duplicate_id`, `geoparquet.geometry_types_mismatch`) are replaced
-/// by `sample.skipped` when the sample cannot be read before `deadline`.
+/// by `sample.skipped` when the sample cannot be read before `deadline`, when even the first
+/// row group's sampled columns exceed [`sample::MAX_BYTES`], or when the rows cannot be read.
 pub async fn data_checks(
     store: Arc<dyn ObjectStore>,
     path: &Path,
     ctx: &Context,
     deadline: Instant,
+) -> Vec<Finding> {
+    data_checks_with_budget(store, path, ctx, deadline, sample::MAX_BYTES).await
+}
+
+pub(crate) async fn data_checks_with_budget(
+    store: Arc<dyn ObjectStore>,
+    path: &Path,
+    ctx: &Context,
+    deadline: Instant,
+    max_bytes: u64,
 ) -> Vec<Finding> {
     let mut findings = hive_partitioning(path);
     let extents = row_group_extents(ctx);
@@ -53,12 +68,12 @@ pub async fn data_checks(
     findings.extend(spatiotemporal_order(&extents));
     findings.extend(id_prefix(&extents));
 
-    let declared = declared_geometry_types(ctx);
+    let declared = sample::declared_geometry_types(ctx);
     let has_id = ctx.arrow_schema.field_with_name("id").is_ok();
     if declared.is_none() && !has_id {
         return findings;
     }
-    match Sample::try_read(store, path, ctx, deadline).await {
+    match Sample::try_read_with_budget(store, path, ctx, deadline, max_bytes).await {
         Ok(sample) => {
             if let Some(declared) = &declared {
                 findings.extend(geometry_types_mismatch(&sample, declared));
@@ -71,6 +86,10 @@ pub async fn data_checks(
             let reason = match err {
                 SampleError::Deadline => "the time budget ran out".to_string(),
                 SampleError::Read(err) => format!("the rows could not be read: {err}"),
+                SampleError::TooLarge => format!(
+                    "the first row group's sampled columns exceed the {} MiB read budget",
+                    max_bytes / (1024 * 1024)
+                ),
             };
             if declared.is_some() {
                 findings.push(skipped(
@@ -241,9 +260,6 @@ impl Leaves {
         let Statistics::ByteArray(stats) = row_group.column(self.id?).statistics()? else {
             return None;
         };
-        if !stats.min_is_exact() || !stats.max_is_exact() {
-            return None;
-        }
         let min = std::str::from_utf8(stats.min_opt()?.data()).ok()?;
         let max = std::str::from_utf8(stats.max_opt()?.data()).ok()?;
         Some((min.to_string(), max.to_string()))
@@ -487,20 +503,6 @@ fn id_prefix(extents: &[Extent]) -> Vec<Finding> {
     )]
 }
 
-fn declared_geometry_types(ctx: &Context) -> Option<BTreeSet<String>> {
-    let GeoState::Valid(metadata) = ctx.geo() else {
-        return None;
-    };
-    let declared: BTreeSet<String> = metadata
-        .columns
-        .get(&metadata.primary_column)?
-        .geometry_types
-        .iter()
-        .cloned()
-        .collect();
-    (!declared.is_empty()).then_some(declared)
-}
-
 fn geometry_types_mismatch(sample: &Sample, declared: &BTreeSet<String>) -> Vec<Finding> {
     let undeclared: Vec<&str> = sample
         .geometry_types
@@ -558,4 +560,146 @@ fn duplicate_id(sample: &Sample) -> Vec<Finding> {
         ),
         REF_GUIDELINES,
     )]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::data_checks_with_budget;
+    use crate::{Context, sample::Sample};
+    use arrow_array::{ArrayRef, BinaryArray, RecordBatch, StringArray};
+    use object_store::{ObjectStore, ObjectStoreExt, memory::InMemory, path::Path};
+    use parquet::{
+        arrow::ArrowWriter,
+        file::{metadata::KeyValue, properties::WriterProperties},
+    };
+    use serde_json::json;
+    use std::{
+        sync::Arc,
+        time::{Duration, Instant},
+    };
+
+    fn point(x: f64, y: f64) -> Vec<u8> {
+        let mut bytes = vec![1u8, 1, 0, 0, 0];
+        bytes.extend_from_slice(&x.to_le_bytes());
+        bytes.extend_from_slice(&y.to_le_bytes());
+        bytes
+    }
+
+    async fn load(geometry_types: serde_json::Value) -> (Arc<dyn ObjectStore>, Path, Context) {
+        load_with_row_groups(geometry_types, 1024).await
+    }
+
+    async fn load_with_row_groups(
+        geometry_types: serde_json::Value,
+        rows_per_group: usize,
+    ) -> (Arc<dyn ObjectStore>, Path, Context) {
+        let ids: ArrayRef = Arc::new(StringArray::from(vec!["a", "a", "b"]));
+        let geometry: ArrayRef = Arc::new(BinaryArray::from_iter_values(
+            (0..3).map(|i| point(f64::from(i), 0.0)),
+        ));
+        let batch = RecordBatch::try_from_iter([("id", ids), ("geometry", geometry)]).unwrap();
+        let geo = json!({
+            "version": "1.1.0",
+            "primary_column": "geometry",
+            "columns": {"geometry": {"encoding": "WKB", "geometry_types": geometry_types}}
+        });
+        let props = WriterProperties::builder()
+            .set_key_value_metadata(Some(vec![KeyValue::new(
+                "geo".to_string(),
+                geo.to_string(),
+            )]))
+            .set_max_row_group_row_count(Some(rows_per_group))
+            .build();
+        let mut buffer = Vec::new();
+        let mut writer = ArrowWriter::try_new(&mut buffer, batch.schema(), Some(props)).unwrap();
+        writer.write(&batch).unwrap();
+        writer.close().unwrap();
+        let store: Arc<dyn ObjectStore> = Arc::new(InMemory::new());
+        let path = Path::from("test.parquet");
+        store.put(&path, buffer.into()).await.unwrap();
+        let context = Context::load(store.clone(), path.clone(), path.to_string())
+            .await
+            .unwrap();
+        (store, path, context)
+    }
+
+    fn deadline() -> Instant {
+        Instant::now() + Duration::from_secs(10)
+    }
+
+    #[tokio::test]
+    async fn over_byte_budget_skips_sampled_checks() {
+        let (store, path, context) = load(json!(["Polygon"])).await;
+        let findings = data_checks_with_budget(store, &path, &context, deadline(), 1).await;
+        let skipped = findings
+            .iter()
+            .filter(|finding| finding.id == "sample.skipped")
+            .count();
+        assert_eq!(skipped, 2);
+        assert!(
+            !findings
+                .iter()
+                .any(|finding| finding.id == "stac.duplicate_id")
+        );
+        assert!(
+            !findings
+                .iter()
+                .any(|finding| finding.id == "geoparquet.geometry_types_mismatch")
+        );
+    }
+
+    #[tokio::test]
+    async fn within_byte_budget_runs_sampled_checks() {
+        let (store, path, context) = load(json!(["Polygon"])).await;
+        let findings = data_checks_with_budget(store, &path, &context, deadline(), u64::MAX).await;
+        assert!(
+            findings
+                .iter()
+                .any(|finding| finding.id == "stac.duplicate_id")
+        );
+        assert!(
+            findings
+                .iter()
+                .any(|finding| finding.id == "geoparquet.geometry_types_mismatch")
+        );
+        assert!(
+            !findings
+                .iter()
+                .any(|finding| finding.id == "sample.skipped")
+        );
+    }
+
+    #[tokio::test]
+    async fn byte_budget_stops_at_row_group_boundary() {
+        let (store, path, context) = load_with_row_groups(json!(["Point"]), 1).await;
+        let first: i64 = context.metadata.row_groups()[0]
+            .columns()
+            .iter()
+            .map(|column| column.compressed_size())
+            .sum();
+        let budget = u64::try_from(first).unwrap();
+        let sample = Sample::try_read_with_budget(store, &path, &context, deadline(), budget)
+            .await
+            .unwrap();
+        assert_eq!(sample.rows, 1);
+    }
+
+    #[tokio::test]
+    async fn geometry_not_read_without_declared_types() {
+        let (store, path, context) = load(json!([])).await;
+        let sample = Sample::try_read(store, &path, &context, deadline())
+            .await
+            .unwrap();
+        assert_eq!(sample.rows, 3);
+        assert!(sample.geometry_types.is_empty());
+    }
+
+    #[tokio::test]
+    async fn geometry_read_with_declared_types() {
+        let (store, path, context) = load(json!(["Point"])).await;
+        let sample = Sample::try_read(store, &path, &context, deadline())
+            .await
+            .unwrap();
+        assert!(sample.geometry_types.contains("Point"));
+    }
 }
