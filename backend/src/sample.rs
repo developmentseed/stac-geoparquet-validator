@@ -1,7 +1,8 @@
 //! Row sampling for data-dependent checks.
 
 use crate::{Context, geo::GeoState, wkb};
-use arrow_array::{ArrayRef, cast::AsArray};
+use arrow_array::{Array, ArrayRef, cast::AsArray};
+use arrow_schema::DataType;
 use futures::TryStreamExt;
 use object_store::{ObjectStore, path::Path};
 #[allow(deprecated)]
@@ -152,6 +153,17 @@ async fn read_rows(
 }
 
 fn strings(array: &ArrayRef) -> Option<Vec<Option<String>>> {
+    let array = match array.data_type() {
+        DataType::Dictionary(_, values)
+            if matches!(
+                values.as_ref(),
+                DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View
+            ) =>
+        {
+            arrow_cast::cast(array, &DataType::Utf8).ok()?
+        }
+        _ => array.clone(),
+    };
     fn collect<'a>(values: impl Iterator<Item = Option<&'a str>>) -> Vec<Option<String>> {
         values.map(|value| value.map(str::to_string)).collect()
     }

@@ -1,6 +1,9 @@
 mod common;
 
-use arrow::array::{BinaryArray, StructArray};
+use arrow::{
+    array::{BinaryArray, DictionaryArray, StructArray},
+    datatypes::Int32Type,
+};
 use common::{
     Fixture, geo_metadata, row_group_props, scattered_points, stac_batch, with_column, with_ids,
     with_points, wkb_point, wkb_polygon,
@@ -279,4 +282,31 @@ async fn past_deadline_skips() {
     assert!(skipped.iter().any(|f| f.section == Section::StacGeoparquet));
     assert!(skipped.iter().any(|f| f.section == Section::Geoparquet));
     assert!(!has(&findings, "stac.duplicate_id"), "{findings:?}");
+}
+
+#[tokio::test]
+async fn same_id_different_dictionary_collection_ok() {
+    let mut fixture = multi_row_group(1000, 250);
+    fixture.batch = with_ids(
+        &fixture.batch,
+        ids((0..1000).map(|i| i % 500)),
+        vec!["test".to_string(); 1000],
+    );
+    let collections: DictionaryArray<Int32Type> =
+        (0..1000).map(|i| if i < 500 { "a" } else { "b" }).collect();
+    fixture.batch = with_column(&fixture.batch, "collection", Arc::new(collections));
+    let findings = findings(&fixture).await;
+    assert!(!has(&findings, "stac.duplicate_id"), "{findings:?}");
+}
+
+#[tokio::test]
+async fn dictionary_ids_duplicate_error() {
+    let mut fixture = multi_row_group(1000, 250);
+    let ids: DictionaryArray<Int32Type> = ids((0..1000).map(|i| i / 2))
+        .iter()
+        .map(String::as_str)
+        .collect();
+    fixture.batch = with_column(&fixture.batch, "id", Arc::new(ids));
+    let findings = findings(&fixture).await;
+    assert!(has(&findings, "stac.duplicate_id"), "{findings:?}");
 }

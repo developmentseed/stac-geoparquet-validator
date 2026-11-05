@@ -10,6 +10,7 @@ serde_json = "1"
 parquet = { version = "60", features = ["async", "object_store", "arrow", "geospatial", "zstd", "snap", "lz4", "brotli", "flate2"] }
 arrow-schema = "60"
 arrow-array = "60"
+arrow-cast = "60"
 object_store = "0.14"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
 bytes = "1"

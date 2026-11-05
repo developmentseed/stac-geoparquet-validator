@@ -32,7 +32,7 @@ pub struct Extent {
     pub bbox: Option<[f64; 4]>,
     /// The `(min, max)` time in microseconds since the epoch.
     pub time: Option<(i64, i64)>,
-    /// The `(min, max)` id.
+    /// The `(min, max)` id, only when both statistics are exact (not truncated).
     pub id: Option<(String, String)>,
 }
 
@@ -241,6 +241,9 @@ impl Leaves {
         let Statistics::ByteArray(stats) = row_group.column(self.id?).statistics()? else {
             return None;
         };
+        if !stats.min_is_exact() || !stats.max_is_exact() {
+            return None;
+        }
         let min = std::str::from_utf8(stats.min_opt()?.data()).ok()?;
         let max = std::str::from_utf8(stats.max_opt()?.data()).ok()?;
         Some((min.to_string(), max.to_string()))
