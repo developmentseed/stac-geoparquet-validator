@@ -2,7 +2,7 @@
 
 Every finding in a report carries a stable `id`. These ids are a public contract: they will not be renamed, and new checks get new ids. Messages are free text and may change.
 
-Checks marked with † read a bounded sample of rows (or per-row-group statistics) in addition to the footer. When the sample cannot be read in time, a `sample.skipped` finding is emitted in place of the sampled checks.
+Checks marked with † read a bounded sample of rows (or per-row-group statistics) in addition to the footer. The sample takes row groups in order, up to 200,000 rows and 128 MiB of compressed column chunks. When the sample cannot be read (the time budget runs out, the first row group alone exceeds the byte budget, or the rows cannot be read), a `sample.skipped` finding is emitted in place of the sampled checks.
 
 The severities are `Error` (invalid against a spec), `Warning` (deviates from a best practice), `Compat` (valid, but some readers are known to fail) and `Info` (a reported fact).
 
@@ -19,7 +19,7 @@ The severities are `Error` (invalid against a spec), `Warning` (deviates from a 
 | `geoparquet.column_nested` | Error | `geoparquet` | A geometry column is nested. | <https://github.com/opengeospatial/geoparquet/blob/v2.0.0/format-specs/geoparquet.md#nesting> |
 | `geoparquet.column_repeated` | Error | `geoparquet` | A geometry column is repeated. | <https://github.com/opengeospatial/geoparquet/blob/v2.0.0/format-specs/geoparquet.md#repetition> |
 | `geoparquet.encoding` | Error | `geoparquet` | The encoding is invalid for the declared version. | <https://github.com/opengeospatial/geoparquet/blob/v2.0.0/format-specs/geoparquet.md#encoding> |
-| `geoparquet.crs_mismatch` | Error | `geoparquet` | The `geo` CRS contradicts the native logical-type CRS (2.0). | <https://github.com/opengeospatial/geoparquet/blob/v2.0.0/format-specs/geoparquet.md#crs-parquet-property> |
+| `geoparquet.crs_mismatch` | Error | `geoparquet` | The `geo` CRS contradicts the native logical-type CRS (any version). | <https://github.com/opengeospatial/geoparquet/blob/v2.0.0/format-specs/geoparquet.md#crs-parquet-property> |
 | `geoparquet.geometry_types_duplicate` | Error | `geoparquet` | Duplicate values in `geometry_types`. | <https://github.com/opengeospatial/geoparquet/blob/v2.0.0/format-specs/geoparquet.md#geometry_types> |
 | `geoparquet.covering_invalid` | Error | `geoparquet` | The bbox covering is malformed. | <https://github.com/opengeospatial/geoparquet/blob/v2.0.0/format-specs/geoparquet.md#covering> |
 | `geoparquet.native_types` | Compat | `geoparquet` | Native `GEOMETRY`/`GEOGRAPHY` logical types, which some readers cannot handle. | <https://github.com/opengeospatial/geoparquet/blob/v2.0.0/format-specs/geoparquet.md#geometry-columns> |
@@ -46,4 +46,4 @@ The severities are `Error` (invalid against a spec), `Warning` (deviates from a 
 | `stacbp.spatiotemporal_order` † | Warning | `stac_geoparquet_best_practices` | The file is not spatio-temporally ordered. | <https://github.com/radiantearth/stac-geoparquet-spec/blob/main/docs/best-practices.md#use-spatio-temporal-ordering> |
 | `stacbp.id_prefix` † | Warning | `stac_geoparquet_best_practices` | Ids are not prefixed with an ordering key. | <https://github.com/radiantearth/stac-geoparquet-spec/blob/main/docs/best-practices.md#prefix-item-ids-with-the-spatio-temporal-ordering-key> |
 | `stacbp.hive_partitioning` | Info | `stac_geoparquet_best_practices` | Hive partitioning detected in the path. | <https://github.com/radiantearth/stac-geoparquet-spec/blob/main/docs/best-practices.md#partitioning> |
-| `sample.skipped` | Info | (section of the skipped check) | A sampled check was skipped because the sample could not be read in time. Its reference is that of the skipped check. | (same as the skipped check) |
+| `sample.skipped` | Info | (section of the skipped check) | A sampled check was skipped because the sample could not be read: the time budget ran out, even the first row group's sampled columns exceed the 128 MiB read budget, or the rows could not be read. Its reference is that of the skipped check. | (same as the skipped check) |
