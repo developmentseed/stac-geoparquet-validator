@@ -1,6 +1,6 @@
 //! File-level context shared by checks.
 
-use crate::{Finding, Section, Severity};
+use crate::{Finding, Section, Severity, geo::GeoState};
 use arrow_schema::SchemaRef;
 use object_store::{ObjectStore, ObjectStoreExt, path::Path};
 #[allow(deprecated)]
@@ -9,7 +9,10 @@ use parquet::{
     arrow::parquet_to_arrow_schema,
     file::metadata::{ParquetMetaData, ParquetMetaDataReader},
 };
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::{Arc, OnceLock},
+};
 
 const MAX_FOOTER_LEN: u64 = 64 * 1024 * 1024;
 const REFERENCE: &str = "https://parquet.apache.org/docs/file-format/";
@@ -29,6 +32,7 @@ pub struct Context {
     pub arrow_schema: SchemaRef,
     /// The file's key-value metadata.
     pub key_value: HashMap<String, String>,
+    pub(crate) geo: OnceLock<GeoState>,
 }
 
 fn unreadable(message: impl Into<String>) -> Finding {
@@ -98,6 +102,7 @@ impl Context {
             metadata: Arc::new(metadata),
             arrow_schema,
             key_value,
+            geo: OnceLock::new(),
         })
     }
 }

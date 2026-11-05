@@ -2,6 +2,7 @@
 
 pub mod checks;
 mod context;
+pub mod geo;
 mod report;
 
 pub use context::Context;

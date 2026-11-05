@@ -222,6 +222,7 @@ pub struct Fixture {
     pub kv: Vec<(String, String)>,
     pub props: WriterProperties,
     pub native: bool,
+    pub native_metadata: Value,
 }
 
 impl Fixture {
@@ -238,6 +239,15 @@ impl Fixture {
                 .set_max_row_group_row_count(Some(100_000))
                 .build(),
             native: false,
+            native_metadata: json!({"crs": "OGC:CRS84"}),
+        }
+    }
+
+    /// Replaces the `geo` key-value metadata, or removes it when `geo` is `None`.
+    pub fn set_geo(&mut self, geo: Option<String>) {
+        self.kv.retain(|(key, _)| key != "geo");
+        if let Some(geo) = geo {
+            self.kv.push(("geo".to_string(), geo));
         }
     }
 
@@ -256,7 +266,10 @@ impl Fixture {
                             "ARROW:extension:name".to_string(),
                             "geoarrow.wkb".to_string(),
                         );
-                        metadata.insert("ARROW:extension:metadata".to_string(), "{}".to_string());
+                        metadata.insert(
+                            "ARROW:extension:metadata".to_string(),
+                            self.native_metadata.to_string(),
+                        );
                         field.as_ref().clone().with_metadata(metadata)
                     } else {
                         field.as_ref().clone()

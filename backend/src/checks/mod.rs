@@ -1,5 +1,6 @@
 //! Validation checks.
 
+mod geoparquet;
 mod parquet;
 
 use crate::{Context, Finding};
@@ -9,7 +10,11 @@ pub type Check = fn(&Context) -> Vec<Finding>;
 
 /// Returns the checks that run against the footer alone.
 pub fn footer_checks() -> Vec<Check> {
-    vec![parquet::info]
+    vec![
+        parquet::info,
+        geoparquet::metadata,
+        geoparquet::native_types,
+    ]
 }
 
 /// Runs every footer check and concatenates the findings.
