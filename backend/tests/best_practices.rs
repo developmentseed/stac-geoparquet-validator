@@ -2,22 +2,16 @@ mod common;
 
 use arrow::array::RecordBatch;
 use bytes::Bytes;
-use common::{Fixture, geo_metadata, stac_batch};
-use object_store::{ObjectStoreExt, memory::InMemory, path::Path};
+use common::{Fixture, geo_metadata, stac_batch, validate_bytes};
 use parquet::{
     arrow::ArrowWriter,
     basic::Compression,
     file::{metadata::KeyValue, properties::WriterProperties},
 };
-use stac_geoparquet_validator::{Context, Finding, checks};
-use std::sync::Arc;
+use stac_geoparquet_validator::Finding;
 
 async fn findings_at(bytes: Bytes, name: &str) -> Vec<Finding> {
-    let store = Arc::new(InMemory::new());
-    let path = Path::from(name);
-    store.put(&path, bytes.into()).await.unwrap();
-    let context = Context::load(store, path, name.to_string()).await.unwrap();
-    checks::run_footer_checks(&context)
+    validate_bytes(bytes, name).await.findings
 }
 
 async fn findings(fixture: &Fixture) -> Vec<Finding> {

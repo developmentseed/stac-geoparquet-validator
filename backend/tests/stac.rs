@@ -4,20 +4,15 @@ use arrow::{
     array::{ArrayRef, RecordBatch, StringArray},
     datatypes::{DataType, Field, Fields, Schema},
 };
-use common::{Fixture, stac_metadata};
-use object_store::{ObjectStoreExt, memory::InMemory, path::Path};
+use common::{Fixture, stac_metadata, validate_bytes};
 use serde_json::json;
-use stac_geoparquet_validator::{Context, Finding, Severity, checks};
+use stac_geoparquet_validator::{Finding, Severity};
 use std::sync::Arc;
 
 async fn findings(fixture: &Fixture) -> Vec<Finding> {
-    let store = Arc::new(InMemory::new());
-    let path = Path::from("test.parquet");
-    store.put(&path, fixture.bytes().into()).await.unwrap();
-    let context = Context::load(store, path, "test.parquet".to_string())
+    validate_bytes(fixture.bytes(), "test.parquet")
         .await
-        .unwrap();
-    checks::run_footer_checks(&context)
+        .findings
 }
 
 fn has(findings: &[Finding], id: &str) -> bool {

@@ -5,8 +5,8 @@ use arrow::{
     datatypes::Int32Type,
 };
 use common::{
-    Fixture, geo_metadata, row_group_props, scattered_points, stac_batch, with_column, with_ids,
-    with_points, wkb_point, wkb_polygon,
+    Fixture, geo_metadata, row_group_props, scattered_points, stac_batch, validate_bytes,
+    with_column, with_ids, with_points, wkb_point, wkb_polygon,
 };
 use object_store::{ObjectStore, ObjectStoreExt, memory::InMemory, path::Path};
 use stac_geoparquet_validator::{Context, Finding, Section, Severity, checks};
@@ -23,19 +23,33 @@ async fn findings_at(fixture: &Fixture, path: &str, deadline: Instant) -> Vec<Fi
         .await
         .unwrap();
     let findings = checks::data_checks(store, &path, &context, deadline).await;
-    for finding in &findings {
-        assert!(!finding.message.contains("NaN"), "{finding:?}");
-    }
+    assert_no_nan(&findings);
     findings
 }
 
-async fn findings(fixture: &Fixture) -> Vec<Finding> {
+fn assert_no_nan(findings: &[Finding]) {
+    for finding in findings {
+        assert!(!finding.message.contains("NaN"), "{finding:?}");
+    }
+}
+
+async fn data_findings(fixture: &Fixture) -> Vec<Finding> {
     findings_at(
         fixture,
         "test.parquet",
         Instant::now() + Duration::from_secs(25),
     )
     .await
+}
+
+async fn findings(fixture: &Fixture) -> Vec<Finding> {
+    findings_named(fixture, "test.parquet").await
+}
+
+async fn findings_named(fixture: &Fixture, name: &str) -> Vec<Finding> {
+    let findings = validate_bytes(fixture.bytes(), name).await.findings;
+    assert_no_nan(&findings);
+    findings
 }
 
 fn has(findings: &[Finding], id: &str) -> bool {
@@ -70,7 +84,7 @@ async fn shuffled_points_warn_spatial_order() {
 #[tokio::test]
 async fn sorted_points_ok() {
     let fixture = multi_row_group(1000, 250);
-    let findings = findings(&fixture).await;
+    let findings = data_findings(&fixture).await;
     assert!(!has(&findings, "bp.spatial_order"), "{findings:?}");
     assert!(
         !has(&findings, "stacbp.spatiotemporal_order"),
@@ -159,7 +173,7 @@ async fn single_row_group_no_order_checks() {
 #[tokio::test]
 async fn zero_rows_no_panic() {
     let fixture = multi_row_group(0, 250);
-    let findings = findings(&fixture).await;
+    let findings = data_findings(&fixture).await;
     assert!(findings.is_empty(), "{findings:?}");
 }
 
@@ -253,12 +267,7 @@ async fn declared_points_match() {
 
 #[tokio::test]
 async fn hive_path_info() {
-    let findings = findings_at(
-        &Fixture::valid(),
-        "year=2016/items.parquet",
-        Instant::now() + Duration::from_secs(25),
-    )
-    .await;
+    let findings = findings_named(&Fixture::valid(), "year=2016/items.parquet").await;
     let finding = get(&findings, "stacbp.hive_partitioning");
     assert_eq!(finding.severity, Severity::Info);
     assert_eq!(finding.section, Section::StacGeoparquetBestPractices);

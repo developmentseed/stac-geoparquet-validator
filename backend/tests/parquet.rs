@@ -1,12 +1,12 @@
 mod common;
 
 use bytes::Bytes;
-use common::{Fixture, stac_batch};
+use common::{Fixture, stac_batch, validate_bytes};
 use object_store::{ObjectStoreExt, memory::InMemory, path::Path};
 use parquet::{
     basic::LogicalType, file::reader::FileReader, file::serialized_reader::SerializedFileReader,
 };
-use stac_geoparquet_validator::{Context, Finding, checks};
+use stac_geoparquet_validator::{Context, Finding};
 use std::sync::Arc;
 
 async fn load(bytes: Bytes) -> Result<Context, Finding> {
@@ -22,8 +22,9 @@ fn count(findings: &[Finding], id: &str) -> usize {
 
 #[tokio::test]
 async fn valid_file_emits_parquet_info() {
-    let context = load(Fixture::valid().bytes()).await.unwrap();
-    let findings = checks::run_footer_checks(&context);
+    let findings = validate_bytes(Fixture::valid().bytes(), "test.parquet")
+        .await
+        .findings;
     assert_eq!(count(&findings, "parquet.info"), 1);
     assert_eq!(count(&findings, "parquet.unreadable"), 0);
 }
@@ -62,8 +63,9 @@ async fn footer_length_larger_than_file_is_unreadable() {
 async fn zero_row_file_loads() {
     let mut fixture = Fixture::valid();
     fixture.batch = stac_batch(0);
-    let context = load(fixture.bytes()).await.unwrap();
-    let findings = checks::run_footer_checks(&context);
+    let findings = validate_bytes(fixture.bytes(), "test.parquet")
+        .await
+        .findings;
     assert_eq!(count(&findings, "parquet.info"), 1);
 }
 

@@ -31,7 +31,7 @@ pub fn footer_checks() -> Vec<Check> {
 }
 
 /// Runs every footer check and concatenates the findings.
-pub fn run_footer_checks(context: &Context) -> Vec<Finding> {
+pub(crate) fn run_footer_checks(context: &Context) -> Vec<Finding> {
     footer_checks()
         .into_iter()
         .flat_map(|check| check(context))

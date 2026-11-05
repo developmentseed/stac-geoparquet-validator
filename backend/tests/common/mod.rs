@@ -8,12 +8,14 @@ use arrow::{
     datatypes::{DataType, Field, Fields, Schema, TimeUnit},
 };
 use bytes::Bytes;
+use object_store::{ObjectStoreExt, memory::InMemory, path::Path};
 use parquet::{
     arrow::ArrowWriter,
     basic::{Compression, ZstdLevel},
     file::{metadata::KeyValue, properties::WriterProperties},
 };
 use serde_json::{Value, json};
+use stac_geoparquet_validator::{Options, Report, validate};
 use std::sync::Arc;
 
 fn utf8_list_field() -> Field {
@@ -374,4 +376,12 @@ pub fn with_ids(batch: &RecordBatch, ids: Vec<String>, collections: Vec<String>)
         "collection",
         Arc::new(StringArray::from(collections)),
     )
+}
+
+/// Validates `bytes` stored in memory under `name`.
+pub async fn validate_bytes(bytes: Bytes, name: &str) -> Report {
+    let store = Arc::new(InMemory::new());
+    let path = Path::from(name);
+    store.put(&path, bytes.into()).await.unwrap();
+    validate(store, path, name.to_string(), &Options::default()).await
 }
