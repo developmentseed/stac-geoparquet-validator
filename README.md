@@ -15,7 +15,7 @@ Live at <https://validate.stac-geoparquet.org/>.
 
 ## Local development
 
-You need Rust, [cargo-lambda](https://www.cargo-lambda.info/), Node 20 and yarn.
+You need Rust, [cargo-lambda](https://www.cargo-lambda.info/), Node 22 and yarn.
 
 Start the backend:
 
