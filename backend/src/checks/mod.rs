@@ -1,5 +1,6 @@
 //! Validation checks.
 
+mod best_practices;
 mod geoparquet;
 mod parquet;
 
@@ -14,6 +15,11 @@ pub fn footer_checks() -> Vec<Check> {
         parquet::info,
         geoparquet::metadata,
         geoparquet::native_types,
+        best_practices::compression,
+        best_practices::row_group_size,
+        best_practices::version,
+        best_practices::file_size,
+        best_practices::extension,
     ]
 }
 
