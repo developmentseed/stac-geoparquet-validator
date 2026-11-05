@@ -15,7 +15,7 @@ export function UploadButton({
       <input
         ref={input}
         type="file"
-        accept=".parquet"
+        accept=".parquet,.geoparquet"
         hidden
         onChange={(e) => {
           const file = e.target.files?.[0];
