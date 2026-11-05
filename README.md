@@ -52,7 +52,8 @@ cd infra && yarn install && yarn test
 { "href": "https://example.com/items.parquet" }
 ```
 
-`href` can be an `http(s)://` URL to a range-capable server, or an `s3://` URL (read unsigned, except in the uploads bucket). Responds with a report:
+`href` can be an `http(s)://` URL to a range-capable server or an `s3://` URL.
+Responds with a report:
 
 ```json
 {
