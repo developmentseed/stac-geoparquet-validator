@@ -129,7 +129,7 @@ impl Context {
 ///
 /// An absent value counts as OGC:CRS84. A `geo` crs of `null` does not. A PROJJSON crs
 /// matches when its `id` is `OGC`/`CRS84` or `EPSG`/`4326`, and a native crs string
-/// matches when it is `OGC:CRS84`, `EPSG:4326`, or such a PROJJSON object.
+/// matches when it is `OGC:CRS84`, `EPSG:4326`, `srid:4326`, or such a PROJJSON object.
 pub fn is_crs84(geo_crs: Option<&Option<Value>>, native_crs: Option<&str>) -> bool {
     let geo = match geo_crs {
         None => true,
@@ -145,7 +145,7 @@ pub fn is_crs84(geo_crs: Option<&Option<Value>>, native_crs: Option<&str>) -> bo
 
 fn string_is_crs84(crs: &str) -> bool {
     match crs {
-        "OGC:CRS84" | "EPSG:4326" => true,
+        "OGC:CRS84" | "EPSG:4326" | "srid:4326" => true,
         _ => serde_json::from_str::<Value>(crs)
             .map(|value| value.is_object() && value_is_crs84(&value))
             .unwrap_or(false),
@@ -208,5 +208,11 @@ mod tests {
         ));
         assert!(!super::is_crs84(None, Some("EPSG:32633")));
         assert!(!super::is_crs84(None, Some("srid:0")));
+    }
+
+    #[test]
+    fn srid_4326_is_crs84() {
+        assert!(super::is_crs84(None, Some("srid:4326")));
+        assert!(!super::is_crs84(None, Some("srid:32633")));
     }
 }

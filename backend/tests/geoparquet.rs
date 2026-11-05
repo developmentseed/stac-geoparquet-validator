@@ -70,6 +70,53 @@ async fn valid_1_0_has_no_errors() {
     assert!(errors(&findings).is_empty(), "{:?}", errors(&findings));
 }
 
+fn beta_fixture() -> Fixture {
+    let mut fixture = Fixture::valid();
+    let mut geo = geo_metadata("1.0.0-beta.1");
+    geo["columns"]["geometry"]
+        .as_object_mut()
+        .unwrap()
+        .remove("covering");
+    fixture.set_geo(Some(geo.to_string()));
+    fixture
+}
+
+#[tokio::test]
+async fn pre_release_version_uses_major_minor_schema() {
+    let report = validate_bytes(beta_fixture().bytes(), "test.parquet").await;
+    assert!(!has(&report.findings, "geoparquet.metadata_schema"));
+    assert!(!has(&report.findings, "geoparquet.unknown_version"));
+    assert!(has(&report.findings, "bp.version"));
+    assert!(
+        report.summary.geoparquet_valid,
+        "{:?}",
+        errors(&report.findings)
+    );
+}
+
+#[tokio::test]
+async fn pre_release_version_runs_column_checks() {
+    let mut fixture = Fixture::valid();
+    let mut geo = geo_metadata("1.0.0-beta.1");
+    geo["primary_column"] = json!("nope");
+    geo["columns"]["geometry"]
+        .as_object_mut()
+        .unwrap()
+        .remove("covering");
+    fixture.set_geo(Some(geo.to_string()));
+    let findings = findings(&fixture).await;
+    assert!(has(&findings, "geoparquet.primary_column_missing"));
+}
+
+#[tokio::test]
+async fn patch_version_uses_major_minor_schema() {
+    let mut fixture = Fixture::valid();
+    fixture.set_geo(Some(geo_metadata("1.1.1").to_string()));
+    let findings = findings(&fixture).await;
+    assert!(!has(&findings, "geoparquet.metadata_schema"));
+    assert!(!has(&findings, "geoparquet.unknown_version"));
+}
+
 #[tokio::test]
 async fn no_geo_no_native_is_missing() {
     let mut fixture = Fixture::valid();
@@ -246,4 +293,15 @@ async fn srid_0_with_null_crs_is_ok() {
     fixture.native_metadata = json!({});
     let findings = findings(&fixture).await;
     assert!(!has(&findings, "geoparquet.crs_mismatch"));
+}
+
+#[tokio::test]
+async fn srid_4326_matches_default_crs() {
+    let mut fixture = Fixture::valid();
+    fixture.set_geo(Some(geo_metadata("2.0.0").to_string()));
+    fixture.native = true;
+    fixture.native_metadata = json!({"crs": "srid:4326"});
+    let findings = findings(&fixture).await;
+    assert!(!has(&findings, "geoparquet.crs_mismatch"), "{findings:?}");
+    assert!(!has(&findings, "stac.crs"), "{findings:?}");
 }

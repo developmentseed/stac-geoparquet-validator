@@ -60,7 +60,11 @@ static SCHEMAS: LazyLock<Vec<(&'static str, Validator)>> = LazyLock::new(|| {
     ]
     .into_iter()
     .map(|(version, schema)| {
-        let schema: Value = serde_json::from_str(schema).expect("vendored schema is valid JSON");
+        let mut schema: Value =
+            serde_json::from_str(schema).expect("vendored schema is valid JSON");
+        if let Some(version) = schema["properties"]["version"].as_object_mut() {
+            version.remove("const");
+        }
         let validator = jsonschema::options()
             .with_retriever(PermissiveRetriever)
             .build(&schema)
