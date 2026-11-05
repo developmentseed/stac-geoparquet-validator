@@ -3,6 +3,7 @@
 mod best_practices;
 mod geoparquet;
 mod parquet;
+mod stac;
 
 use crate::{Context, Finding};
 
@@ -20,6 +21,9 @@ pub fn footer_checks() -> Vec<Check> {
         best_practices::version,
         best_practices::file_size,
         best_practices::extension,
+        stac::columns,
+        stac::crs,
+        stac::metadata,
     ]
 }
 
