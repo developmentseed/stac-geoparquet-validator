@@ -3,6 +3,7 @@
   "private": true,
   "packageManager": "yarn@4.18.1",
   "version": "0.0.0",
+  "license": "MIT",
   "scripts": {
     "build": "tsc --noEmit",
     "cdk": "cdk",

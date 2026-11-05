@@ -1,23 +1,21 @@
 # stac-geoparquet validator
 
-A web tool and public API that takes a [stac-geoparquet](https://github.com/radiantearth/stac-geoparquet-spec) file, by URL or upload, and tells you whether you can trust it.
+A web tool and public API that takes a [stac-geoparquet](https://github.com/radiantearth/stac-geoparquet-spec) file, by URL or upload, and validates it against the spec and best practices.
 
-The report keeps apart what makes a file **invalid**, what is valid but **not best practice**, and what is valid but **some readers cannot handle**. It answers four questions up front: is it valid Parquet, valid GeoParquet, which GeoParquet version, and valid stac-geoparquet.
-
-Live at <https://validate.stac-geoparquet.org/>.
+<https://validate.stac-geoparquet.org/>.
 
 ## Layout
 
-- `backend/`: Rust validator, deployed as an AWS Lambda. All validation happens here, using HTTP range requests, footer first, with bounded sampling.
-- `frontend/`: React, TypeScript, Vite, Chakra UI single-page app.
-- `infra/`: AWS CDK app (TypeScript).
-- `docs/checks.md`: the check ids, a public contract.
+- `backend/`: Rust validator, built directly as an AWS Lambda
+- `frontend/`: Single-page web application
+- `infra/`: AWS CDK app (TypeScript)
+- `docs/checks.md`: the checks used by the validator (the public contract)
 
 ## Local development
 
-You need Rust, [cargo-lambda](https://www.cargo-lambda.info/), Node 22 and yarn.
+You need Rust, [cargo-lambda](https://www.cargo-lambda.info/), Node 22, and yarn.
 
-Start the backend:
+To start the backend:
 
 ```sh
 cd backend
@@ -47,8 +45,6 @@ cd infra && yarn install && yarn test
 ```
 
 ## API
-
-The service is public and anonymous. CORS allows any origin, and requests are throttled (10 requests/s, burst 20). Validation must finish within 25 s.
 
 ### `POST /api/validate`
 
@@ -92,19 +88,6 @@ Finding ids are stable and listed in [docs/checks.md](docs/checks.md); messages 
 
 Responds with `{ "upload_url": "...", "href": "s3://..." }`. `PUT` the file (at most 2 GB) to `upload_url`, then pass `href` to `/api/validate`. Uploads are deleted after one day.
 
-## Continuous integration and deployment
-
-- `.github/workflows/ci.yml` runs formatting, lints, type checks and tests for `backend/`, `frontend/` and `infra/` on every pull request.
-- `.github/workflows/deploy.yml` runs on every push to `main` (and on manual dispatch). It runs the same CI jobs, then runs `cdk deploy --all` in the `production` environment, but only if they pass.
-
-The deploy job authenticates to AWS with GitHub OIDC. One-time setup, after the first manual deploy below:
-
-1. In the AWS account, add the GitHub OIDC identity provider (`token.actions.githubusercontent.com`, audience `sts.amazonaws.com`) if it isn't there already.
-2. Create an IAM role:
-   - Trust policy: allow `sts:AssumeRoleWithWebIdentity` from that provider, with the conditions `token.actions.githubusercontent.com:aud` = `sts.amazonaws.com` and `token.actions.githubusercontent.com:sub` = `repo:<owner>/stac-geoparquet-validator:environment:production`.
-   - Permissions: `sts:AssumeRole` on `arn:aws:iam::<account>:role/cdk-*`. CDK deploys through its bootstrap roles, so the role needs nothing else.
-3. In the GitHub repository settings, set the `production` environment variable `AWS_DEPLOY_ROLE_ARN` to that role's ARN. Add protection rules to the environment if you want deploys to need approval.
-
 ## Deploying
 
 The first deploy is done by hand, because it creates the certificate that needs DNS records in Gandi. After that, pushes to `main` redeploy automatically (see above). You need AWS credentials for the target account, cargo-lambda, and the `aarch64-unknown-linux-gnu` Rust target.
@@ -116,3 +99,7 @@ The first deploy is done by hand, because it creates the certificate that needs 
 5. Add a `validate` CNAME in Gandi pointing at the `DistributionDomainName` stack output.
 
 DNS for `stac-geoparquet.org` is managed by hand on gandi.net; no Route 53 hosted zone is involved.
+
+## License
+
+[MIT](LICENSE)
