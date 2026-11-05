@@ -1,0 +1,148 @@
+# Maintaining the validator's rules
+
+This file is for coding agents (Claude Code, Codex, Cursor, etc.) and the people who drive them. It explains how to change what the validator checks as the specifications and best practices evolve.
+
+The validator encodes four upstream documents. When one of them changes, the validator should change with it:
+
+| Upstream document | Where it lives | Encoded in |
+| --- | --- | --- |
+| GeoParquet specification | <https://github.com/opengeospatial/geoparquet/blob/main/format-specs/geoparquet.md> (released versions are tagged `vX.Y.Z`) | `backend/src/checks/geoparquet.rs`, `backend/src/geo.rs`, `backend/schemas/geoparquet-*.json` |
+| Distributing GeoParquet (best practices) | <https://github.com/opengeospatial/geoparquet/blob/main/format-specs/distributing-geoparquet.md> | `backend/src/checks/best_practices.rs`, `bp.spatial_order` in `backend/src/checks/data.rs` |
+| stac-geoparquet specification | <https://github.com/radiantearth/stac-geoparquet-spec/blob/main/stac-geoparquet-spec.md> | `backend/src/checks/stac.rs`, `backend/schemas/stac-geoparquet-metadata.json` |
+| stac-geoparquet best practices | <https://github.com/radiantearth/stac-geoparquet-spec/blob/main/docs/best-practices.md> | `stacbp.*` checks in `backend/src/checks/data.rs` |
+
+Every rule change must cite the upstream text it implements. If you can't point to a sentence in one of these documents (or a bug report showing real files breaking real readers, for `Compat` checks), don't add the rule.
+
+## How the code is organized
+
+- `backend/src/report.rs`: `Severity`, `Section`, `Finding` and `Report`. The summary booleans (`parquet_valid`, `geoparquet_valid`, `stac_geoparquet_valid`) are derived from which sections contain `Error` findings, so severity and section choices affect the headline answers.
+- `backend/src/context.rs`: `Context`, which holds the parsed footer for one file. Footer-only checks receive `&Context`.
+- `backend/src/geo.rs`: parses the `geo` metadata and detects native Parquet `GEOMETRY`/`GEOGRAPHY` columns. It also holds `is_crs84`.
+- `backend/src/checks/mod.rs`: `footer_checks()` is the registry of footer-only checks. A check function that isn't listed there never runs.
+- `backend/src/checks/{parquet,geoparquet,best_practices,stac}.rs`: footer-only checks, one file per section.
+- `backend/src/checks/data.rs` and `backend/src/sample.rs`: checks that need row-group statistics or a bounded sample of rows. They are bounded by the time budget, a 200,000-row cap and a 128 MiB byte budget. When they can't run, they emit `sample.skipped`.
+- `backend/schemas/`: JSON Schemas vendored verbatim from upstream tags. Code may adjust them in memory (for example, `geoparquet.rs` strips the `version` `const` so pre-releases and patch versions validate); never edit the files on disk.
+- `backend/tests/`: integration tests. There is one file per check module. `tests/common/mod.rs` has the fixture builder (`Fixture`, `stac_batch`, `geo_metadata`, `stac_metadata`, `with_column`, `validate_bytes`, …).
+- `docs/checks.md`: the public list of check ids. It must match the code exactly.
+- `frontend/src/types.ts`: mirrors the report JSON. You only need to touch it when you add a `Section` or `Severity` variant.
+
+## The check contract
+
+Check ids are a **public API**. Other tools (stac-map, scripts, CI pipelines) call `POST /api/validate` and match on ids.
+
+- **Never rename a check id.** If a rule's meaning changes enough that the old id is misleading, retire the old id and add a new one.
+- **Never reuse a retired id** for a different rule.
+- Id format is `<prefix>.<snake_case_name>`. The prefix is set by the section:
+
+  | Section | Prefix |
+  | --- | --- |
+  | `parquet` | `parquet.` |
+  | `geoparquet` | `geoparquet.` |
+  | `geoparquet_best_practices` | `bp.` |
+  | `stac_geoparquet` | `stac.` |
+  | `stac_geoparquet_best_practices` | `stacbp.` |
+- **Choose the severity from the strength of the upstream wording:**
+
+  | Severity | When to use it |
+  | --- | --- |
+  | `Error` | The file violates a MUST or REQUIRED in a specification. |
+  | `Warning` | A best-practice document recommends otherwise, or a spec says SHOULD. |
+  | `Compat` | The file is valid, but named readers are known to fail on it. The message must name the readers and versions. |
+  | `Info` | A fact about the file. |
+- **Changing a check's severity is a contract change**, because it can flip `*_valid` in the summary. Record it in the PR description, say why, and link the upstream change.
+- **Messages are free text**, and tests must never assert on them.
+- **`reference` must be a URL to the exact upstream section.** Spec references are pinned to a release tag (e.g. `.../blob/v2.0.0/...#crs`). Best-practice references point at `main`, since those documents aren't versioned. Check that the anchor exists before using it.
+- **`report_version` in `report.rs` is `"1"`.** Bump it only if the JSON shape changes (fields added, removed or retyped). Adding or retiring check ids does not change the shape.
+
+## Recipes
+
+Use test-driven development for every recipe: write a failing test first, run it to see it fail, then change the code.
+
+### Add a check
+
+1. Find the upstream sentence. Decide the section, severity and a new id using the contract above.
+2. Write the test in the matching `backend/tests/<module>.rs`. Build the smallest fixture that triggers the rule (start from `Fixture::valid()` and change one thing). Assert that the id is present. Also add a test that `Fixture::valid()` doesn't emit it.
+3. Implement the check:
+   - Footer-only: put a `pub(super) fn name(context: &Context) -> Vec<Finding>` in the section's module, use that module's local `finding()`/`error()` helper and a `REF_*` constant, and register it in `footer_checks()`.
+   - Needs data: add it to `data_checks` in `data.rs`. Respect the deadline and the sample budgets, and emit `sample.skipped` when it can't run.
+4. Add a row to `docs/checks.md` (id, severity, section, what it flags, reference). Mark it with † if it needs sampling.
+5. Make sure the check can't panic or emit `NaN` on odd input: missing columns, wrong types, zero rows, one row group, null values, or metadata that is valid JSON with the wrong shape.
+
+### Change an existing rule (threshold, condition or severity)
+
+1. Quote the old and new upstream text in the PR description.
+2. Update or add tests that show the new boundary, on both sides of it.
+3. Change the code, keeping the id. If the meaning changed enough to retire the id, follow "Retire a check" and "Add a check" instead.
+4. Update the row in `docs/checks.md`.
+5. Constants that encode best-practice numbers are named consts at the top of each module. Change the const; don't add a second copy:
+   - `ROW_GROUP_ROWS` and `MAX_FILE_SIZE` in `checks/best_practices.rs`
+   - `ORDER_THRESHOLD` in `checks/data.rs`
+   - `MAX_ROWS` and `MAX_BYTES` (the sample budgets) in `sample.rs`
+   - `REQUIRED_COLUMNS`, `DATETIME_COLUMNS` and `SUPPORTED_VERSIONS` in `checks/stac.rs`
+
+### Support a new specification version
+
+GeoParquet (e.g. 2.1.0):
+
+1. Vendor the schema verbatim:
+
+   ```sh
+   gh api "repos/opengeospatial/geoparquet/contents/format-specs/schema.json?ref=v2.1.0" \
+     -H "Accept: application/vnd.github.raw" > backend/schemas/geoparquet-2.1.0.json
+   ```
+2. Register it in the `SCHEMAS` list in `checks/geoparquet.rs`, keyed by `major.minor`.
+3. Read the upstream diff between the previous tag and the new one (`gh api repos/opengeospatial/geoparquet/compare/v2.0.0...v2.1.0`). For each normative change, apply "Add a check" or "Change an existing rule". Version-specific rules (allowed encodings, the native-type requirement) are matched on version in `geoparquet.rs`.
+4. Decide whether `bp.version` should now warn on the previous version, based on what the distribution best practices say.
+5. If the new version becomes the reference, move the `REF_*` tags in `geoparquet.rs` and `data.rs` to the new tag. Check that every anchor still exists.
+
+stac-geoparquet (e.g. 1.2.0):
+
+1. Vendor `json-schema/metadata.json` from the matching tag or commit into `backend/schemas/stac-geoparquet-metadata.json`.
+2. Add the version to `SUPPORTED_VERSIONS` in `checks/stac.rs` (used by `stac.version`).
+3. Read the spec diff and apply the recipes above. Column requirements live in `stac.rs`: `REQUIRED_COLUMNS`, `DATETIME_COLUMNS`, and the type rules in `type_problem`.
+
+### Retire a check
+
+1. Remove the code and its tests.
+2. In `docs/checks.md`, move the row to a "Retired ids" section at the end of the file (create it the first time) with the date and the reason. Don't delete it, so integrators can see it's gone on purpose.
+
+### Add a `Compat` check (a reader breaks on valid files)
+
+1. You need evidence: a reproducible failure in a named reader at a named version. Link the issue (e.g. developmentseed/stac-map#555 for native `GEOMETRY` breaking gpq).
+2. The message names the reader and the versions affected. When the readers are fixed and the broken versions are old, consider retiring the check.
+
+## Testing and verification
+
+Run these before finishing. All must pass with no warnings:
+
+```sh
+cd backend && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
+cd backend && cargo test --test regression -- --ignored
+cd frontend && yarn vitest run && yarn tsc -b && yarn prettier --check .
+cd infra && yarn test
+```
+
+The second command needs network access. It runs the validator against real published files. If a real file's findings change, check that the change is intended and say so in the PR description.
+
+Test rules for this repo:
+
+- Assert on check ids and severities, never on message text.
+- Tests have no doc comments.
+- Build fixtures in Rust with the helpers in `tests/common/mod.rs`. Don't commit binary `.parquet` fixtures.
+- For a bug found in a real file, add a fixture that reproduces its shape. If the file is public and stable, also add an assertion to `tests/regression.rs`.
+
+## Code style
+
+- No inline comments that explain what the code does. Public items get doc comments. In docstrings, use single backticks for code.
+- Match the surrounding module: each check module has a local `finding()` helper and `REF_*` constants.
+- Keep checks pure: a footer check reads `&Context` and returns findings. It does no I/O.
+
+## Checklist for a rule-change PR
+
+- [ ] Upstream text quoted or linked for each rule touched.
+- [ ] No check id renamed or reused. New ids follow `<prefix>.<snake_case>`.
+- [ ] Severity matches the strength of the upstream wording. Severity changes are called out.
+- [ ] `reference` URLs point to existing anchors, and spec URLs are pinned to a tag.
+- [ ] Tests written first, covering both sides of any threshold.
+- [ ] `docs/checks.md` matches the code. There is one row per id, and retired ids are kept.
+- [ ] All verification commands pass, including the regression test.
