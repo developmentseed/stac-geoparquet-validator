@@ -88,18 +88,6 @@ Finding ids are stable and listed in [docs/checks.md](docs/checks.md); messages 
 
 Responds with `{ "upload_url": "...", "href": "s3://..." }`. `PUT` the file (at most 2 GB) to `upload_url`, then pass `href` to `/api/validate`. Uploads are deleted after one day.
 
-## Deploying
-
-The first deploy is done by hand, because it creates the certificate that needs DNS records in Gandi. After that, pushes to `main` redeploy automatically (see above). You need AWS credentials for the target account, cargo-lambda, and the `aarch64-unknown-linux-gnu` Rust target.
-
-1. Build the frontend: `yarn install && yarn build` in `frontend/`.
-2. Bootstrap CDK once per region: `yarn cdk bootstrap aws://ACCOUNT/us-east-1 aws://ACCOUNT/us-west-2` in `infra/`.
-3. Deploy: `yarn install && yarn cdk deploy --all` in `infra/`. The `ValidatorCertificate` stack lives in `us-east-1` and the `Validator` stack in `us-west-2`.
-4. While the certificate stack waits for validation, copy the ACM validation CNAME from the ACM console (or the CloudFormation events) and add it in Gandi.
-5. Add a `validate` CNAME in Gandi pointing at the `DistributionDomainName` stack output.
-
-DNS for `stac-geoparquet.org` is managed by hand on gandi.net; no Route 53 hosted zone is involved.
-
 ## License
 
 [MIT](LICENSE)
