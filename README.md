@@ -92,9 +92,22 @@ Finding ids are stable and listed in [docs/checks.md](docs/checks.md); messages 
 
 Responds with `{ "upload_url": "...", "href": "s3://..." }`. `PUT` the file (at most 2 GB) to `upload_url`, then pass `href` to `/api/validate`. Uploads are deleted after one day.
 
+## Continuous integration and deployment
+
+- `.github/workflows/ci.yml` runs formatting, lints, type checks and tests for `backend/`, `frontend/` and `infra/` on every pull request.
+- `.github/workflows/deploy.yml` runs on every push to `main` (and on manual dispatch). It runs the same CI jobs, then runs `cdk deploy --all` in the `production` environment, but only if they pass.
+
+The deploy job authenticates to AWS with GitHub OIDC. One-time setup, after the first manual deploy below:
+
+1. In the AWS account, add the GitHub OIDC identity provider (`token.actions.githubusercontent.com`, audience `sts.amazonaws.com`) if it isn't there already.
+2. Create an IAM role:
+   - Trust policy: allow `sts:AssumeRoleWithWebIdentity` from that provider, with the conditions `token.actions.githubusercontent.com:aud` = `sts.amazonaws.com` and `token.actions.githubusercontent.com:sub` = `repo:<owner>/stac-geoparquet-validator:environment:production`.
+   - Permissions: `sts:AssumeRole` on `arn:aws:iam::<account>:role/cdk-*`. CDK deploys through its bootstrap roles, so the role needs nothing else.
+3. In the GitHub repository settings, set the `production` environment variable `AWS_DEPLOY_ROLE_ARN` to that role's ARN. Add protection rules to the environment if you want deploys to need approval.
+
 ## Deploying
 
-Deploying is done by hand. You need AWS credentials for the target account, cargo-lambda, and the `aarch64-unknown-linux-gnu` Rust target.
+The first deploy is done by hand, because it creates the certificate that needs DNS records in Gandi. After that, pushes to `main` redeploy automatically (see above). You need AWS credentials for the target account, cargo-lambda, and the `aarch64-unknown-linux-gnu` Rust target.
 
 1. Build the frontend: `yarn install && yarn build` in `frontend/`.
 2. Bootstrap CDK once per region: `yarn cdk bootstrap aws://ACCOUNT/us-east-1 aws://ACCOUNT/us-west-2` in `infra/`.
