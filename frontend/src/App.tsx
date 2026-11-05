@@ -3,6 +3,7 @@ import {
   Container,
   Heading,
   HStack,
+  Image,
   Link,
   Spinner,
   Stack,
@@ -10,6 +11,7 @@ import {
 } from "@chakra-ui/react";
 import { useEffect, useRef, useState } from "react";
 import { upload, validate } from "./api";
+import { Footer } from "./components/Footer";
 import { HrefForm } from "./components/HrefForm";
 import { Report } from "./components/Report";
 import { UploadButton } from "./components/UploadButton";
@@ -77,7 +79,10 @@ export default function App() {
     <Container maxW="4xl" py="8">
       <Stack gap="6">
         <Stack>
-          <Heading size="2xl">stac-geoparquet validator</Heading>
+          <HStack gap="3">
+            <Image src="/logo.png" alt="" boxSize="10" />
+            <Heading size="2xl">stac-geoparquet validator</Heading>
+          </HStack>
           <Text color="fg.muted">
             Validates{" "}
             <Link href="https://stac-geoparquet.org/">stac-geoparquet</Link>{" "}
@@ -110,6 +115,7 @@ export default function App() {
           </Alert.Root>
         )}
         {report && <Report report={report} />}
+        <Footer />
       </Stack>
     </Container>
   );

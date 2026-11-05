@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@chakra-ui/react": "^3.38.0",
+    "@devseed-ui/collecticons-chakra": "^4.0.0",
     "@emotion/react": "^11.14.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
