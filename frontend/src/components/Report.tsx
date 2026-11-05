@@ -1,4 +1,4 @@
-import { Stack, Text } from "@chakra-ui/react";
+import { Stack } from "@chakra-ui/react";
 import type { Report as ReportData } from "../types";
 import { Findings } from "./Findings";
 import { Headline } from "./Headline";
@@ -7,9 +7,6 @@ import { Headline } from "./Headline";
 export function Report({ report }: { report: ReportData }) {
   return (
     <Stack gap="5">
-      <Text color="fg.muted" truncate>
-        {report.href}
-      </Text>
       <Headline summary={report.summary} />
       <Findings findings={report.findings} />
     </Stack>

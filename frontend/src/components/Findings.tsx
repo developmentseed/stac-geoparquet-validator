@@ -10,7 +10,9 @@ import {
   Text,
 } from "@chakra-ui/react";
 import { useState } from "react";
+import { LuExternalLink } from "react-icons/lu";
 import { SECTIONS, SEVERITIES, type Finding, type Severity } from "../types";
+import { SeverityIcon } from "./SeverityIcon";
 
 /** Findings grouped by section, with severity filter toggles. */
 export function Findings({ findings }: { findings: Finding[] }) {
@@ -61,6 +63,7 @@ export function Findings({ findings }: { findings: Finding[] }) {
                         SEVERITIES.find((s) => s.severity === f.severity)?.color
                       }
                     >
+                      <SeverityIcon severity={f.severity} />
                       {f.severity}
                     </Badge>
                     <Code>{f.id}</Code>
@@ -70,7 +73,7 @@ export function Findings({ findings }: { findings: Finding[] }) {
                       rel="noreferrer"
                       ms="auto"
                     >
-                      reference
+                      reference <LuExternalLink aria-hidden />
                     </Link>
                   </HStack>
                   <Text mt="1">{f.message}</Text>

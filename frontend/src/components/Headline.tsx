@@ -1,5 +1,7 @@
 import { Badge, Box, HStack, SimpleGrid, Text } from "@chakra-ui/react";
+import { LuCircleCheck, LuCircleX } from "react-icons/lu";
 import { SEVERITIES, type Summary } from "../types";
+import { SeverityIcon } from "./SeverityIcon";
 
 function versionAnswer(summary: Summary): string {
   if (summary.geoparquet_version) return summary.geoparquet_version;
@@ -24,9 +26,13 @@ function Answer({
       <Text fontSize="sm" color="fg.muted">
         {label}
       </Text>
-      <Text fontSize="lg" fontWeight="semibold" color={color}>
-        {value}
-      </Text>
+      <HStack gap="2" color={color}>
+        {ok === true && <LuCircleCheck aria-hidden />}
+        {ok === false && <LuCircleX aria-hidden />}
+        <Text fontSize="lg" fontWeight="semibold">
+          {value}
+        </Text>
+      </HStack>
     </Box>
   );
 }
@@ -64,6 +70,7 @@ export function Headline({ summary }: { summary: Summary }) {
       <HStack mt="3" gap="2" wrap="wrap">
         {SEVERITIES.map(({ severity, label, color }) => (
           <Badge key={severity} colorPalette={color} size="lg">
+            <SeverityIcon severity={severity} />
             {summary.counts[severity]} {label}
           </Badge>
         ))}

@@ -1,9 +1,9 @@
 import {
   Alert,
-  Box,
   Container,
   Heading,
   HStack,
+  Link,
   Spinner,
   Stack,
   Text,
@@ -76,13 +76,18 @@ export default function App() {
   return (
     <Container maxW="4xl" py="8">
       <Stack gap="6">
-        <Box>
+        <Stack>
           <Heading size="2xl">stac-geoparquet validator</Heading>
           <Text color="fg.muted">
-            Check a stac-geoparquet file before you publish it, or find out why
-            a reader is struggling with one.
+            Validates{" "}
+            <Link href="https://stac-geoparquet.org/">stac-geoparquet</Link>{" "}
+            files. Find a bug or have a feature request? Open an{" "}
+            <Link href="https://github.com/developmentseed/stac-geoparquet-validator/issues">
+              issue on Github
+            </Link>
+            .
           </Text>
-        </Box>
+        </Stack>
         <HStack align="start">
           <HrefForm
             key={formKey}

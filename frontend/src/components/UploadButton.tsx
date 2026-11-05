@@ -1,5 +1,6 @@
-import { Button } from "@chakra-ui/react";
+import { IconButton } from "@chakra-ui/react";
 import { useRef } from "react";
+import { LuUpload } from "react-icons/lu";
 
 /** Picks a local parquet file and hands it to `onFile`. */
 export function UploadButton({
@@ -23,13 +24,13 @@ export function UploadButton({
           if (file) onFile(file);
         }}
       />
-      <Button
+      <IconButton
         variant="outline"
         disabled={disabled}
         onClick={() => input.current?.click()}
       >
-        Upload file
-      </Button>
+        <LuUpload aria-hidden />
+      </IconButton>
     </>
   );
 }

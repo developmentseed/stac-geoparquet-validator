@@ -1,5 +1,6 @@
 import { Button, Input, HStack } from "@chakra-ui/react";
 import { useState, type FormEvent } from "react";
+import { LuSearch } from "react-icons/lu";
 
 /** A form for entering an href to validate. */
 export function HrefForm({
@@ -27,7 +28,7 @@ export function HrefForm({
           onChange={(e) => setValue(e.target.value)}
         />
         <Button type="submit" disabled={disabled || !value.trim()}>
-          Validate
+          <LuSearch aria-hidden /> Validate
         </Button>
       </HStack>
     </form>
