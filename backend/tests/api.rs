@@ -1,0 +1,162 @@
+use aws_sdk_s3::config::{BehaviorVersion, Credentials, Region};
+use http_body_util::BodyExt;
+use lambda_http::{Body, Request, http};
+use serde_json::{Value, json};
+use stac_geoparquet_validator::Options;
+use stac_geoparquet_validator::api::{State, handle};
+
+const BUCKET: &str = "my-uploads";
+
+fn state(with_s3: bool) -> State {
+    let s3 = with_s3.then(|| {
+        let config = aws_sdk_s3::Config::builder()
+            .behavior_version(BehaviorVersion::latest())
+            .region(Region::new("us-west-2"))
+            .credentials_provider(Credentials::new("AKID", "SECRET", None, None, "test"))
+            .build();
+        aws_sdk_s3::Client::from_conf(config)
+    });
+    State {
+        options: Options {
+            uploads_bucket: with_s3.then(|| BUCKET.to_string()),
+            ..Options::default()
+        },
+        s3,
+    }
+}
+
+fn request(method: &str, path: &str, body: &str) -> Request {
+    http::Request::builder()
+        .method(method)
+        .uri(path)
+        .body(Body::from(body.to_string()))
+        .unwrap()
+}
+
+async fn call(state: &State, req: Request) -> (u16, http::HeaderMap, Value) {
+    let response = handle(req, state).await.unwrap();
+    let status = response.status().as_u16();
+    let headers = response.headers().clone();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    (status, headers, value)
+}
+
+#[tokio::test]
+async fn validate_bad_body_400() {
+    let (status, _, body) = call(&state(false), request("POST", "/api/validate", "nope")).await;
+    assert_eq!(status, 400);
+    assert!(body["error"].is_string());
+}
+
+#[tokio::test]
+async fn validate_returns_report() {
+    let req = request(
+        "POST",
+        "/api/validate",
+        &json!({"href": "file:///x"}).to_string(),
+    );
+    let (status, headers, body) = call(&state(false), req).await;
+    assert_eq!(status, 200);
+    assert_eq!(headers["content-type"], "application/json");
+    assert_eq!(body["summary"]["parquet_valid"], false);
+}
+
+#[tokio::test]
+async fn uploads_too_big_400() {
+    let size = 2u64 * 1024 * 1024 * 1024 + 1;
+    let req = request(
+        "POST",
+        "/api/uploads",
+        &json!({"filename": "a.parquet", "size": size}).to_string(),
+    );
+    let (status, _, _) = call(&state(true), req).await;
+    assert_eq!(status, 400);
+}
+
+#[tokio::test]
+async fn uploads_zero_size_400() {
+    let req = request(
+        "POST",
+        "/api/uploads",
+        &json!({"filename": "a.parquet", "size": 0}).to_string(),
+    );
+    let (status, _, _) = call(&state(true), req).await;
+    assert_eq!(status, 400);
+}
+
+#[tokio::test]
+async fn uploads_empty_filename_400() {
+    let req = request(
+        "POST",
+        "/api/uploads",
+        &json!({"filename": "..", "size": 10}).to_string(),
+    );
+    let (status, _, _) = call(&state(true), req).await;
+    assert_eq!(status, 400);
+}
+
+#[tokio::test]
+async fn uploads_without_bucket_503() {
+    let req = request(
+        "POST",
+        "/api/uploads",
+        &json!({"filename": "a.parquet", "size": 10}).to_string(),
+    );
+    let (status, _, _) = call(&state(false), req).await;
+    assert_eq!(status, 503);
+}
+
+#[tokio::test]
+async fn uploads_returns_presigned_put() {
+    let req = request(
+        "POST",
+        "/api/uploads",
+        &json!({"filename": "a.parquet", "size": 1234}).to_string(),
+    );
+    let (status, _, body) = call(&state(true), req).await;
+    assert_eq!(status, 200);
+    assert!(body["upload_url"].as_str().unwrap().contains(BUCKET));
+    assert!(
+        body["href"]
+            .as_str()
+            .unwrap()
+            .starts_with(&format!("s3://{BUCKET}/uploads/"))
+    );
+}
+
+#[tokio::test]
+async fn filename_sanitized() {
+    let req = request(
+        "POST",
+        "/api/uploads",
+        &json!({"filename": "../a b.parquet", "size": 10}).to_string(),
+    );
+    let (status, _, body) = call(&state(true), req).await;
+    assert_eq!(status, 200);
+    let href = body["href"].as_str().unwrap();
+    assert!(href.ends_with("/a_b.parquet"), "{href}");
+    assert!(!href.contains("/.."));
+}
+
+#[tokio::test]
+async fn cors_headers_present() {
+    let (_, headers, _) = call(&state(false), request("POST", "/api/validate", "nope")).await;
+    assert_eq!(headers["access-control-allow-origin"], "*");
+    assert_eq!(headers["access-control-allow-methods"], "POST, OPTIONS");
+    assert_eq!(headers["access-control-allow-headers"], "content-type");
+}
+
+#[tokio::test]
+async fn options_204() {
+    let (status, headers, _) = call(&state(false), request("OPTIONS", "/api/validate", "")).await;
+    assert_eq!(status, 204);
+    assert_eq!(headers["access-control-allow-origin"], "*");
+}
+
+#[tokio::test]
+async fn unknown_404() {
+    let (status, headers, _) = call(&state(false), request("GET", "/api/nope", "")).await;
+    assert_eq!(status, 404);
+    assert_eq!(headers["access-control-allow-origin"], "*");
+}

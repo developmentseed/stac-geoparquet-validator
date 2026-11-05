@@ -18,6 +18,15 @@ futures = "0.3"
 jsonschema = { version = "0.60", default-features = false }
 reqwest = { version = "0.13", default-features = false, features = ["http2", "rustls"] }
 url = "2"
+lambda_http = "1"
+aws-config = "1"
+aws-sdk-s3 = "1"
+uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]
 arrow = "60"
+http-body-util = "0.1.5"
+
+[[bin]]
+name = "lambda"
+path = "src/bin/lambda.rs"
