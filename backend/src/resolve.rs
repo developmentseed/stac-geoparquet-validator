@@ -370,7 +370,7 @@ mod tests {
         (port, hits)
     }
 
-    async fn serve_without_head(body: Vec<u8>) -> (u16, Arc<AtomicUsize>) {
+    async fn serve_file(body: Vec<u8>, head: bool, suffix: bool) -> (u16, Arc<AtomicUsize>) {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
         let heads = Arc::new(AtomicUsize::new(0));
@@ -380,8 +380,11 @@ mod tests {
                 let mut buffer = vec![0; 8192];
                 let n = socket.read(&mut buffer).await.unwrap_or(0);
                 let request = String::from_utf8_lossy(&buffer[..n]).to_lowercase();
-                if request.starts_with("head ") {
+                let is_head = request.starts_with("head ");
+                if is_head {
                     counter.fetch_add(1, Ordering::SeqCst);
+                }
+                if is_head && !head {
                     let _ = socket
                         .write_all(b"HTTP/1.1 405 Method Not Allowed\r\ncontent-length: 0\r\nconnection: close\r\n\r\n")
                         .await;
@@ -391,19 +394,26 @@ mod tests {
                 let range = request
                     .lines()
                     .find_map(|line| line.strip_prefix("range: bytes="))
-                    .map(|range| {
-                        let (start, end) = range.trim().split_once('-').unwrap();
-                        match (start.parse::<usize>().ok(), end.parse::<usize>().ok()) {
-                            (None, Some(suffix)) => len.saturating_sub(suffix)..len,
-                            (Some(start), Some(end)) => start..(end + 1).min(len),
-                            (Some(start), None) => start..len,
-                            (None, None) => 0..len,
-                        }
-                    });
+                    .map(|range| range.trim().split_once('-').unwrap());
+                if !suffix && range.is_some_and(|(start, _)| start.is_empty()) {
+                    let _ = socket
+                        .write_all(b"HTTP/1.1 501 Not Implemented\r\ncontent-length: 0\r\nconnection: close\r\n\r\n")
+                        .await;
+                    continue;
+                }
+                let range = range.map(|(start, end)| {
+                    match (start.parse::<usize>().ok(), end.parse::<usize>().ok()) {
+                        (None, Some(suffix)) => len.saturating_sub(suffix)..len,
+                        (Some(start), Some(end)) => start..(end + 1).min(len),
+                        (Some(start), None) => start..len,
+                        (None, None) => 0..len,
+                    }
+                });
                 let (status, range) = match range {
                     Some(range) => ("206 Partial Content", range),
                     None => ("200 OK", 0..len),
                 };
+                let body_range = if is_head { 0..0 } else { range.clone() };
                 let header = format!(
                     "HTTP/1.1 {status}\r\ncontent-length: {}\r\ncontent-range: bytes {}-{}/{len}\r\nconnection: close\r\n\r\n",
                     range.len(),
@@ -411,7 +421,7 @@ mod tests {
                     range.end - 1
                 );
                 let _ = socket.write_all(header.as_bytes()).await;
-                let _ = socket.write_all(&body[range]).await;
+                let _ = socket.write_all(&body[body_range]).await;
             }
         });
         (port, heads)
@@ -431,7 +441,7 @@ mod tests {
     async fn loads_footer_without_head_requests() {
         let body = parquet_bytes();
         let size = body.len() as u64;
-        let (port, heads) = serve_without_head(body).await;
+        let (port, heads) = serve_file(body, false, true).await;
         let url = Url::parse(&format!("http://127.0.0.1:{port}/x.parquet")).unwrap();
         let (store, path) = http_store(url, &Options::default()).unwrap();
         let context = Context::load(store, path, "x.parquet".to_string())
@@ -440,6 +450,20 @@ mod tests {
         assert_eq!(context.size, size);
         assert_eq!(context.metadata.file_metadata().num_rows(), 2);
         assert_eq!(heads.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn loads_footer_when_suffix_ranges_are_unsupported() {
+        let body = parquet_bytes();
+        let size = body.len() as u64;
+        let (port, heads) = serve_file(body, true, false).await;
+        let url = Url::parse(&format!("http://127.0.0.1:{port}/x.parquet")).unwrap();
+        let (store, path) = http_store(url, &Options::default()).unwrap();
+        let context = Context::load(store, path, "x.parquet".to_string())
+            .await
+            .unwrap();
+        assert_eq!(context.size, size);
+        assert!(heads.load(Ordering::SeqCst) >= 1);
     }
 
     #[test]

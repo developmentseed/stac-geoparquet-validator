@@ -2,7 +2,8 @@
 
 use crate::{Finding, Section, Severity, geo::GeoState};
 use arrow_schema::SchemaRef;
-use object_store::{GetOptions, GetRange, ObjectStore, path::Path};
+use bytes::Bytes;
+use object_store::{GetOptions, GetRange, ObjectStore, ObjectStoreExt, path::Path};
 #[allow(deprecated)]
 use parquet::arrow::async_reader::ParquetObjectReader;
 use parquet::{
@@ -45,6 +46,55 @@ fn unreadable(message: impl Into<String>) -> Finding {
     )
 }
 
+fn too_small(size: u64) -> Result<(), Finding> {
+    if size < 12 {
+        Err(unreadable(format!(
+            "file is {size} bytes, too small to be Parquet"
+        )))
+    } else {
+        Ok(())
+    }
+}
+
+fn read_error(err: object_store::Error) -> Finding {
+    unreadable(format!("could not read file: {err}"))
+}
+
+/// Returns the file size and its last 8 bytes.
+///
+/// Uses one suffix-range GET, which works for presigned GET URLs and servers that reject
+/// HEAD. Servers that reject suffix ranges get a HEAD followed by a bounded range GET.
+async fn read_tail(store: &dyn ObjectStore, path: &Path) -> Result<(u64, Bytes), Finding> {
+    let options = GetOptions {
+        range: Some(GetRange::Suffix(8)),
+        ..GetOptions::default()
+    };
+    let (size, tail) = match store.get_opts(path, options).await {
+        Ok(result) => {
+            let size = result.meta.size;
+            too_small(size)?;
+            (size, result.bytes().await.map_err(read_error)?)
+        }
+        Err(err @ object_store::Error::NotFound { .. }) => return Err(read_error(err)),
+        Err(_) => {
+            let size = store.head(path).await.map_err(read_error)?.size;
+            too_small(size)?;
+            let tail = store
+                .get_range(path, size - 8..size)
+                .await
+                .map_err(read_error)?;
+            (size, tail)
+        }
+    };
+    if tail.len() != 8 {
+        return Err(unreadable(format!(
+            "expected the last 8 bytes of the file, got {}",
+            tail.len()
+        )));
+    }
+    Ok((size, tail))
+}
+
 impl Context {
     /// Reads and validates the footer of the file at `path`.
     ///
@@ -54,32 +104,7 @@ impl Context {
         path: Path,
         href: String,
     ) -> Result<Context, Finding> {
-        let tail = store
-            .get_opts(
-                &path,
-                GetOptions {
-                    range: Some(GetRange::Suffix(8)),
-                    ..GetOptions::default()
-                },
-            )
-            .await
-            .map_err(|err| unreadable(format!("could not read file: {err}")))?;
-        let size = tail.meta.size;
-        if size < 12 {
-            return Err(unreadable(format!(
-                "file is {size} bytes, too small to be Parquet"
-            )));
-        }
-        let tail = tail
-            .bytes()
-            .await
-            .map_err(|err| unreadable(format!("could not read file: {err}")))?;
-        if tail.len() != 8 {
-            return Err(unreadable(format!(
-                "expected the last 8 bytes of the file, got {}",
-                tail.len()
-            )));
-        }
+        let (size, tail) = read_tail(store.as_ref(), &path).await?;
         if &tail[4..8] != b"PAR1" {
             return Err(unreadable("file does not end with the PAR1 magic bytes"));
         }
