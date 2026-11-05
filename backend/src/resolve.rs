@@ -337,8 +337,10 @@ impl HttpConnector for GuardedConnector {
 #[cfg(test)]
 mod tests {
     use super::{MAX_REDIRECTS, http_store, is_public, redirect_error};
-    use crate::Options;
+    use crate::{Context, Options};
+    use arrow_array::{ArrayRef, RecordBatch, StringArray};
     use object_store::ObjectStoreExt;
+    use parquet::arrow::ArrowWriter;
     use std::{
         net::IpAddr,
         sync::{
@@ -366,6 +368,78 @@ mod tests {
             }
         });
         (port, hits)
+    }
+
+    async fn serve_without_head(body: Vec<u8>) -> (u16, Arc<AtomicUsize>) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let heads = Arc::new(AtomicUsize::new(0));
+        let counter = heads.clone();
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                let mut buffer = vec![0; 8192];
+                let n = socket.read(&mut buffer).await.unwrap_or(0);
+                let request = String::from_utf8_lossy(&buffer[..n]).to_lowercase();
+                if request.starts_with("head ") {
+                    counter.fetch_add(1, Ordering::SeqCst);
+                    let _ = socket
+                        .write_all(b"HTTP/1.1 405 Method Not Allowed\r\ncontent-length: 0\r\nconnection: close\r\n\r\n")
+                        .await;
+                    continue;
+                }
+                let len = body.len();
+                let range = request
+                    .lines()
+                    .find_map(|line| line.strip_prefix("range: bytes="))
+                    .map(|range| {
+                        let (start, end) = range.trim().split_once('-').unwrap();
+                        match (start.parse::<usize>().ok(), end.parse::<usize>().ok()) {
+                            (None, Some(suffix)) => len.saturating_sub(suffix)..len,
+                            (Some(start), Some(end)) => start..(end + 1).min(len),
+                            (Some(start), None) => start..len,
+                            (None, None) => 0..len,
+                        }
+                    });
+                let (status, range) = match range {
+                    Some(range) => ("206 Partial Content", range),
+                    None => ("200 OK", 0..len),
+                };
+                let header = format!(
+                    "HTTP/1.1 {status}\r\ncontent-length: {}\r\ncontent-range: bytes {}-{}/{len}\r\nconnection: close\r\n\r\n",
+                    range.len(),
+                    range.start,
+                    range.end - 1
+                );
+                let _ = socket.write_all(header.as_bytes()).await;
+                let _ = socket.write_all(&body[range]).await;
+            }
+        });
+        (port, heads)
+    }
+
+    fn parquet_bytes() -> Vec<u8> {
+        let ids: ArrayRef = Arc::new(StringArray::from(vec!["a", "b"]));
+        let batch = RecordBatch::try_from_iter([("id", ids)]).unwrap();
+        let mut buffer = Vec::new();
+        let mut writer = ArrowWriter::try_new(&mut buffer, batch.schema(), None).unwrap();
+        writer.write(&batch).unwrap();
+        writer.close().unwrap();
+        buffer
+    }
+
+    #[tokio::test]
+    async fn loads_footer_without_head_requests() {
+        let body = parquet_bytes();
+        let size = body.len() as u64;
+        let (port, heads) = serve_without_head(body).await;
+        let url = Url::parse(&format!("http://127.0.0.1:{port}/x.parquet")).unwrap();
+        let (store, path) = http_store(url, &Options::default()).unwrap();
+        let context = Context::load(store, path, "x.parquet".to_string())
+            .await
+            .unwrap();
+        assert_eq!(context.size, size);
+        assert_eq!(context.metadata.file_metadata().num_rows(), 2);
+        assert_eq!(heads.load(Ordering::SeqCst), 0);
     }
 
     #[test]

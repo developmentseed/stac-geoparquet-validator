@@ -2,7 +2,7 @@
 
 use crate::{Finding, Section, Severity, geo::GeoState};
 use arrow_schema::SchemaRef;
-use object_store::{ObjectStore, ObjectStoreExt, path::Path};
+use object_store::{GetOptions, GetRange, ObjectStore, path::Path};
 #[allow(deprecated)]
 use parquet::arrow::async_reader::ParquetObjectReader;
 use parquet::{
@@ -54,20 +54,32 @@ impl Context {
         path: Path,
         href: String,
     ) -> Result<Context, Finding> {
-        let head = store
-            .head(&path)
+        let tail = store
+            .get_opts(
+                &path,
+                GetOptions {
+                    range: Some(GetRange::Suffix(8)),
+                    ..GetOptions::default()
+                },
+            )
             .await
             .map_err(|err| unreadable(format!("could not read file: {err}")))?;
-        let size = head.size;
+        let size = tail.meta.size;
         if size < 12 {
             return Err(unreadable(format!(
                 "file is {size} bytes, too small to be Parquet"
             )));
         }
-        let tail = store
-            .get_range(&path, size - 8..size)
+        let tail = tail
+            .bytes()
             .await
             .map_err(|err| unreadable(format!("could not read file: {err}")))?;
+        if tail.len() != 8 {
+            return Err(unreadable(format!(
+                "expected the last 8 bytes of the file, got {}",
+                tail.len()
+            )));
+        }
         if &tail[4..8] != b"PAR1" {
             return Err(unreadable("file does not end with the PAR1 magic bytes"));
         }
