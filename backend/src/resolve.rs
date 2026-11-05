@@ -3,7 +3,8 @@
 //!
 //! Every `http(s)://` host is resolved and rejected if any of its addresses is not publicly
 //! routable. The HTTP client re-applies the same check on every connection through its DNS
-//! resolver, never follows redirects, and ignores proxy environment variables.
+//! resolver, follows at most five redirects (only to `http(s)://` URLs whose IP-literal hosts
+//! are public), and ignores proxy environment variables.
 
 use crate::{Finding, Options, Section, Severity};
 use object_store::{
@@ -23,6 +24,7 @@ use url::{Host, Url};
 const REFERENCE: &str = "https://parquet.apache.org/docs/file-format/";
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_RETRIES: usize = 2;
+const MAX_REDIRECTS: usize = 5;
 const USER_AGENT: &str = concat!("stac-geoparquet-validator/", env!("CARGO_PKG_VERSION"));
 
 /// A parsed, supported href.
@@ -278,6 +280,33 @@ impl reqwest::dns::Resolve for GuardedReqwestDns {
     }
 }
 
+fn redirect_error(url: &Url, previous: usize) -> Option<String> {
+    if previous > MAX_REDIRECTS {
+        return Some(format!("too many redirects (more than {MAX_REDIRECTS})"));
+    }
+    if !matches!(url.scheme(), "http" | "https") {
+        return Some(format!(
+            "refusing to follow a redirect to scheme {}",
+            url.scheme()
+        ));
+    }
+    let ip = match url.host()? {
+        Host::Ipv4(ip) => IpAddr::V4(ip),
+        Host::Ipv6(ip) => IpAddr::V6(ip),
+        Host::Domain(_) => return None,
+    };
+    (!is_public(ip)).then(|| format!("refusing to follow a redirect to non-public address {ip}"))
+}
+
+fn redirect_policy() -> reqwest::redirect::Policy {
+    reqwest::redirect::Policy::custom(|attempt| {
+        match redirect_error(attempt.url(), attempt.previous().len()) {
+            Some(err) => attempt.error(err),
+            None => attempt.follow(),
+        }
+    })
+}
+
 #[derive(Debug)]
 struct GuardedConnector {
     timeout: Duration,
@@ -287,7 +316,7 @@ impl HttpConnector for GuardedConnector {
     fn connect(&self, _: &ClientOptions) -> object_store::Result<HttpClient> {
         let client = reqwest::Client::builder()
             .user_agent(USER_AGENT)
-            .redirect(reqwest::redirect::Policy::none())
+            .redirect(redirect_policy())
             .no_proxy()
             .dns_resolver(Arc::new(GuardedReqwestDns))
             .connect_timeout(CONNECT_TIMEOUT)
@@ -307,7 +336,7 @@ impl HttpConnector for GuardedConnector {
 
 #[cfg(test)]
 mod tests {
-    use super::{http_store, is_public};
+    use super::{MAX_REDIRECTS, http_store, is_public, redirect_error};
     use crate::Options;
     use object_store::ObjectStoreExt;
     use std::{
@@ -378,7 +407,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn does_not_follow_redirects() {
+    async fn does_not_follow_redirects_to_private_ip_literals() {
         let (target, target_hits) = serve(
             "HTTP/1.1 200 OK\r\ncontent-length: 4\r\nconnection: close\r\n\r\nPAR1".to_string(),
         )
@@ -392,6 +421,63 @@ mod tests {
         assert!(store.head(&path).await.is_err());
         assert!(hits.load(Ordering::SeqCst) >= 1);
         assert_eq!(target_hits.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn does_not_follow_redirects_to_private_hosts() {
+        let (target, target_hits) = serve(
+            "HTTP/1.1 200 OK\r\ncontent-length: 4\r\nconnection: close\r\n\r\nPAR1".to_string(),
+        )
+        .await;
+        let (port, _) = serve(format!(
+            "HTTP/1.1 302 Found\r\nlocation: http://localhost:{target}/x.parquet\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
+        ))
+        .await;
+        let url = Url::parse(&format!("http://127.0.0.1:{port}/x.parquet")).unwrap();
+        let (store, path) = http_store(url, &Options::default()).unwrap();
+        assert!(store.head(&path).await.is_err());
+        assert_eq!(target_hits.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn redirect_policy_follows_public_targets() {
+        for url in [
+            "https://example.com/x.parquet",
+            "http://example.com/x.parquet",
+            "https://8.8.8.8/x.parquet",
+            "https://[2606:4700:4700::1111]/x.parquet",
+        ] {
+            assert!(
+                redirect_error(&Url::parse(url).unwrap(), 1).is_none(),
+                "{url}"
+            );
+        }
+        let url = Url::parse("https://example.com/x.parquet").unwrap();
+        assert!(redirect_error(&url, MAX_REDIRECTS).is_none());
+    }
+
+    #[test]
+    fn redirect_policy_rejects_unsafe_targets() {
+        for url in [
+            "http://127.0.0.1/x.parquet",
+            "http://169.254.169.254/latest/meta-data/",
+            "http://10.0.0.1/x.parquet",
+            "http://[::1]/x.parquet",
+            "http://[::ffff:127.0.0.1]/x.parquet",
+            "file:///etc/passwd",
+            "ftp://example.com/x.parquet",
+        ] {
+            assert!(
+                redirect_error(&Url::parse(url).unwrap(), 1).is_some(),
+                "{url}"
+            );
+        }
+    }
+
+    #[test]
+    fn redirect_policy_limits_hops() {
+        let url = Url::parse("https://example.com/x.parquet").unwrap();
+        assert!(redirect_error(&url, MAX_REDIRECTS + 1).is_some());
     }
 
     #[tokio::test]
