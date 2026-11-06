@@ -21,6 +21,9 @@ import type { Report as ReportData } from "./types";
 
 type Status = "idle" | "uploading" | "validating";
 
+const EXAMPLE_HREF =
+  "https://raw.githubusercontent.com/stac-utils/rustac/refs/heads/main/crates/duckdb/data/sentinel-1-global-mosaics.parquet";
+
 /** The validator single-page app. */
 export default function App() {
   const initial = new URLSearchParams(window.location.search).get("href") ?? "";
@@ -79,6 +82,12 @@ export default function App() {
     }
   };
 
+  const loadExample = () => {
+    setUploaded(null);
+    setFormValue(EXAMPLE_HREF);
+    setFormKey((k) => k + 1);
+  };
+
   useEffect(() => {
     if (initial && !started.current) {
       started.current = true;
@@ -119,6 +128,15 @@ export default function App() {
           />
           <UploadButton disabled={busy} onFile={submitFile} />
         </HStack>
+        <Text color="fg.muted" fontSize="sm" mt="-4">
+          Don't have a file?{" "}
+          <Link asChild>
+            <button type="button" onClick={loadExample} disabled={busy}>
+              Try an example
+            </button>
+          </Link>
+          .
+        </Text>
         {busy && (
           <HStack>
             <Spinner />

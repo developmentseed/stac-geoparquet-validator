@@ -98,3 +98,12 @@ it("links to the API docs", () => {
     "/api/docs",
   );
 });
+
+it("fills the href with an example file", async () => {
+  await uploadFile();
+  fireEvent.click(screen.getByRole("button", { name: /example/i }));
+  const input = screen.getByLabelText("href") as HTMLInputElement;
+  await waitFor(() => expect(input.value).toMatch(/^https:\/\/.+\.parquet$/));
+  fireEvent.click(screen.getByRole("button", { name: /validate/i }));
+  await waitFor(() => expect(validate).toHaveBeenLastCalledWith(input.value));
+});
