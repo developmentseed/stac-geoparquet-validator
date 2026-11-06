@@ -1,6 +1,9 @@
-import type { Catalog, Report } from "./types";
+import type { Catalog, Report, UploadResponse } from "./types";
 
 const base = (): string => import.meta.env.VITE_API_BASE ?? "";
+
+/** The URL of the interactive API docs. */
+export const docsUrl = (): string => `${base()}/api/docs`;
 
 /** The URL of the checks catalog, which renders as HTML in a browser. */
 export const checksUrl = (): string => `${base()}/api/checks`;
@@ -44,10 +47,10 @@ export function validate(href: string): Promise<Report> {
  * The browser sets `Content-Length` from the file body.
  */
 export async function upload(file: File): Promise<string> {
-  const { upload_url, href } = await postJson<{
-    upload_url: string;
-    href: string;
-  }>("/api/uploads", { filename: file.name, size: file.size });
+  const { upload_url, href } = await postJson<UploadResponse>("/api/uploads", {
+    filename: file.name,
+    size: file.size,
+  });
   const response = await fetch(upload_url, { method: "PUT", body: file });
   if (!response.ok) {
     throw new Error(`upload failed with status ${response.status}`);

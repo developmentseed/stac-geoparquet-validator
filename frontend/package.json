@@ -11,7 +11,8 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "generate": "yarn dlx -q -p openapi-typescript@7.13.0 -p typescript@5.9.3 openapi-typescript ../backend/openapi.json -o src/openapi.ts && prettier --write src/openapi.ts"
   },
   "dependencies": {
     "@chakra-ui/react": "^3.38.0",

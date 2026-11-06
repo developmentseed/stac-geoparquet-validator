@@ -13,7 +13,7 @@ A web tool and public API that takes a [stac-geoparquet](https://github.com/radi
 
 ## Local development
 
-You need Rust, [cargo-lambda](https://www.cargo-lambda.info/), Node 22, and yarn.
+You need Rust, [cargo-lambda](https://www.cargo-lambda.info/), Node 22 (run `nvm use` to pick it up from `.nvmrc`), and yarn.
 
 To start the backend:
 
@@ -45,6 +45,8 @@ cd infra && yarn install && yarn test
 ```
 
 ## API
+
+Interactive docs (Swagger UI) are at [`/api/docs`](https://validate.stac-geoparquet.org/api/docs). The API is described by an OpenAPI 3.1 document at [`GET /api/openapi.json`](https://validate.stac-geoparquet.org/api/openapi.json), generated from the Rust types with [utoipa](https://github.com/juhaku/utoipa). A copy is committed at `backend/openapi.json` (regenerate it with `cargo run --bin openapi > openapi.json` in `backend/`), and the frontend's TypeScript types in `frontend/src/openapi.ts` are generated from it with `yarn generate`.
 
 ### `POST /api/validate`
 

@@ -5,6 +5,7 @@ use std::sync::LazyLock;
 use askama::Template;
 use num_format::{Locale, ToFormattedString};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::sample::{MAX_BYTES, MAX_ROWS};
 use crate::{Section, Severity};
@@ -20,7 +21,7 @@ pub fn catalog() -> &'static Catalog {
 
 /// Every check the validator can emit, the documents they come from, and the ids that
 /// have been retired.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct Catalog {
     /// The report sections and the upstream document each one encodes.
     pub sections: Vec<SectionInfo>,
@@ -31,7 +32,7 @@ pub struct Catalog {
 }
 
 /// A report section and its upstream document.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct SectionInfo {
     /// The section.
     pub section: Section,
@@ -42,7 +43,7 @@ pub struct SectionInfo {
 }
 
 /// An upstream specification or best-practice document.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct Source {
     /// The document's title.
     pub title: String,
@@ -51,7 +52,7 @@ pub struct Source {
 }
 
 /// One check id.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CheckInfo {
     /// The stable check id.
     pub id: String,
@@ -59,6 +60,7 @@ pub struct CheckInfo {
     pub severity: Severity,
     /// The section of the check's findings, or `None` when it takes the section of
     /// another check.
+    #[schema(required = true)]
     pub section: Option<Section>,
     /// Whether the check reads a bounded sample of rows or row-group statistics.
     pub sampled: bool,
@@ -69,7 +71,7 @@ pub struct CheckInfo {
 }
 
 /// A check id that is no longer emitted.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct RetiredCheck {
     /// The retired id.
     pub id: String,
