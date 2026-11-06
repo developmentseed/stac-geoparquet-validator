@@ -5,7 +5,8 @@
 
 <img src="frontend/public/logo.png" alt="stac-geoparquet validator logo" width="96">
     
-A web tool and public API that takes a [stac-geoparquet](https://github.com/radiantearth/stac-geoparquet-spec) file, by URL or upload, and validates it against the spec and best practices.
+    
+A web tool and public API that takes a [stac-geoparquet](https://github.com/radiantearth/stac-geoparquet-spec) file, by URL or upload, and validates it against the [spec and best practices](https://validate.stac-geoparquet.org/api/checks).
 
 <https://validate.stac-geoparquet.org/>
 
