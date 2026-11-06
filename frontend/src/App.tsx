@@ -27,6 +27,10 @@ export default function App() {
   const [report, setReport] = useState<ReportData | null>(null);
   const [formKey, setFormKey] = useState(0);
   const [formValue, setFormValue] = useState(initial);
+  const [uploaded, setUploaded] = useState<{
+    name: string;
+    href: string;
+  } | null>(null);
   const started = useRef(false);
 
   const run = async (href: string) => {
@@ -43,6 +47,11 @@ export default function App() {
   };
 
   const submitHref = (href: string) => {
+    if (uploaded && href === uploaded.name) {
+      void run(uploaded.href);
+      return;
+    }
+    setUploaded(null);
     const url = new URL(window.location.href);
     url.searchParams.set("href", href);
     window.history.replaceState(null, "", url);
@@ -58,7 +67,8 @@ export default function App() {
       const url = new URL(window.location.href);
       url.searchParams.delete("href");
       window.history.replaceState(null, "", url);
-      setFormValue(href);
+      setUploaded({ name: file.name, href });
+      setFormValue(file.name);
       setFormKey((k) => k + 1);
       await run(href);
     } catch (e) {

@@ -12,6 +12,15 @@ export default defineConfig(({ mode }) => {
     },
     test: {
       environment: "jsdom",
+      alias: {
+        "@devseed-ui/collecticons-chakra":
+          "@devseed-ui/collecticons-chakra/dist/index.esm.js",
+      },
+      server: {
+        deps: {
+          inline: ["@devseed-ui/collecticons-chakra"],
+        },
+      },
     },
   };
 });
