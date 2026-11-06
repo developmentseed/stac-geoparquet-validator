@@ -1,8 +1,13 @@
 # stac-geoparquet validator
 
+[![CI](https://img.shields.io/github/actions/workflow/status/developmentseed/stac-geoparquet-validator/ci.yml?branch=main&style=for-the-badge&label=CI)](https://github.com/developmentseed/stac-geoparquet-validator/actions/workflows/ci.yml)
+[![Deploy](https://img.shields.io/github/actions/workflow/status/developmentseed/stac-geoparquet-validator/deploy.yml?branch=main&style=for-the-badge&label=Deploy)](https://github.com/developmentseed/stac-geoparquet-validator/actions/workflows/deploy.yml)
+
+<img src="frontend/public/logo.png" alt="stac-geoparquet validator logo" width="96">
+    
 A web tool and public API that takes a [stac-geoparquet](https://github.com/radiantearth/stac-geoparquet-spec) file, by URL or upload, and validates it against the spec and best practices.
 
-<https://validate.stac-geoparquet.org/>.
+<https://validate.stac-geoparquet.org/>
 
 ## Layout
 
@@ -92,16 +97,6 @@ Lists every check id the validator can emit, with its severity, section, descrip
 | `application/json`, `*/*` or none | JSON matching [`backend/checks.schema.json`](backend/checks.schema.json) |
 | `text/markdown`, `text/plain` or `text/*` | Markdown |
 | `text/html` (e.g. a browser) | HTML |
-
-Anything else gets a `406`.
-
-### `POST /api/uploads`
-
-```json
-{ "filename": "items.parquet", "size": 123456 }
-```
-
-Responds with `{ "upload_url": "...", "href": "s3://..." }`. `PUT` the file (at most 2 GB) to `upload_url`, then pass `href` to `/api/validate`. Uploads are deleted after one day.
 
 ## License
 
