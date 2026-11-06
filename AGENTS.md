@@ -23,8 +23,8 @@ Every rule change must cite the upstream text it implements. If you can't point 
 - `backend/src/checks/data.rs` and `backend/src/sample.rs`: checks that need row-group statistics or a bounded sample of rows. They are bounded by the time budget, a 200,000-row cap and a 128 MiB byte budget. When they can't run, they emit `sample.skipped`.
 - `backend/schemas/`: JSON Schemas vendored verbatim from upstream tags. Code may adjust them in memory (for example, `geoparquet.rs` strips the `version` `const` so pre-releases and patch versions validate); never edit the files on disk.
 - `backend/tests/`: integration tests. There is one file per check module. `tests/common/mod.rs` has the fixture builder (`Fixture`, `stac_batch`, `geo_metadata`, `stac_metadata`, `with_column`, `validate_bytes`, …).
-- `docs/checks.md`: the public list of check ids. It must match the code exactly.
-- `frontend/src/types.ts`: mirrors the report JSON. You only need to touch it when you add a `Section` or `Severity` variant.
+- `backend/checks.json`: the public list of check ids, validated by `backend/checks.schema.json`. It must match the code exactly; `tests/catalog.rs` fails if an id literal in `src/` is missing from it or vice versa. `src/catalog.rs` embeds it and renders it as JSON, Markdown or HTML (the Askama templates `backend/templates/checks.{md,html}`) for `GET /api/checks`, which also feeds the frontend's "Rules" dialog.
+- `frontend/src/types.ts`: mirrors the report and checks catalog JSON. You only need to touch it when you add a `Section` or `Severity` variant, or change the shape of `checks.json`.
 
 ## The check contract
 
@@ -65,7 +65,7 @@ Use test-driven development for every recipe: write a failing test first, run it
 3. Implement the check:
    - Footer-only: put a `pub(super) fn name(context: &Context) -> Vec<Finding>` in the section's module, use that module's local `finding()`/`error()` helper and a `REF_*` constant, and register it in `footer_checks()`.
    - Needs data: add it to `data_checks` in `data.rs`. Respect the deadline and the sample budgets, and emit `sample.skipped` when it can't run.
-4. Add a row to `docs/checks.md` (id, severity, section, what it flags, reference). Mark it with † if it needs sampling.
+4. Add an entry to `checks` in `backend/checks.json` (`id`, `severity`, `section`, `sampled`, `description`, `references`). Set `sampled` to `true` if it needs sampling.
 5. Make sure the check can't panic or emit `NaN` on odd input: missing columns, wrong types, zero rows, one row group, null values, or metadata that is valid JSON with the wrong shape.
 
 ### Change an existing rule (threshold, condition or severity)
@@ -73,7 +73,7 @@ Use test-driven development for every recipe: write a failing test first, run it
 1. Quote the old and new upstream text in the PR description.
 2. Update or add tests that show the new boundary, on both sides of it.
 3. Change the code, keeping the id. If the meaning changed enough to retire the id, follow "Retire a check" and "Add a check" instead.
-4. Update the row in `docs/checks.md`.
+4. Update the entry in `backend/checks.json`.
 5. Constants that encode best-practice numbers are named consts at the top of each module. Change the const; don't add a second copy:
    - `ROW_GROUP_ROWS` and `MAX_FILE_SIZE` in `checks/best_practices.rs`
    - `ORDER_THRESHOLD` in `checks/data.rs`
@@ -104,7 +104,7 @@ stac-geoparquet (e.g. 1.2.0):
 ### Retire a check
 
 1. Remove the code and its tests.
-2. In `docs/checks.md`, move the row to a "Retired ids" section at the end of the file (create it the first time) with the date and the reason. Don't delete it, so integrators can see it's gone on purpose.
+2. In `backend/checks.json`, move the entry from `checks` to `retired` as `{"id", "retired", "reason"}`, with the date as `YYYY-MM-DD`. Don't delete it, so integrators can see it's gone on purpose.
 
 ### Add a `Compat` check (a reader breaks on valid files)
 
@@ -144,5 +144,5 @@ Test rules for this repo:
 - [ ] Severity matches the strength of the upstream wording. Severity changes are called out.
 - [ ] `reference` URLs point to existing anchors, and spec URLs are pinned to a tag.
 - [ ] Tests written first, covering both sides of any threshold.
-- [ ] `docs/checks.md` matches the code. There is one row per id, and retired ids are kept.
+- [ ] `backend/checks.json` matches the code. There is one entry per id, and retired ids are kept.
 - [ ] All verification commands pass, including the regression test.

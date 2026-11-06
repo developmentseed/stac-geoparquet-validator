@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "stac-geoparquet validator checks",
+  "description": "The public list of check ids emitted by the validator.",
+  "type": "object",
+  "required": ["sections", "checks", "retired"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "sections": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/sectionInfo" }
+    },
+    "checks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/check" }
+    },
+    "retired": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/retired" }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^(parquet|geoparquet|bp|stac|stacbp|sample)\\.[a-z][a-z0-9_]*$"
+    },
+    "severity": { "enum": ["error", "warning", "compat", "info"] },
+    "section": {
+      "enum": [
+        "parquet",
+        "geoparquet",
+        "geoparquet_best_practices",
+        "stac_geoparquet",
+        "stac_geoparquet_best_practices",
+        null
+      ]
+    },
+    "sectionInfo": {
+      "type": "object",
+      "required": ["section", "title", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "section": { "$ref": "#/$defs/section", "type": "string" },
+        "title": { "type": "string", "minLength": 1 },
+        "source": {
+          "type": "object",
+          "description": "The upstream document the section's checks come from.",
+          "required": ["title", "href"],
+          "additionalProperties": false,
+          "properties": {
+            "title": { "type": "string", "minLength": 1 },
+            "href": { "$ref": "#/$defs/reference" }
+          }
+        }
+      }
+    },
+    "reference": {
+      "type": "string",
+      "pattern": "^https://"
+    },
+    "check": {
+      "type": "object",
+      "required": [
+        "id",
+        "severity",
+        "section",
+        "sampled",
+        "description",
+        "references"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "severity": { "$ref": "#/$defs/severity" },
+        "section": {
+          "$ref": "#/$defs/section",
+          "description": "The report section, or `null` when the finding takes the section of another check."
+        },
+        "sampled": {
+          "type": "boolean",
+          "description": "Whether the check reads a bounded sample of rows or row-group statistics."
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What the check flags. May contain `code` spans."
+        },
+        "references": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/reference" },
+          "uniqueItems": true,
+          "description": "Upstream sections the check implements. Empty only when `section` is `null`."
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "section": { "const": null } } },
+          "then": {
+            "properties": {
+              "id": { "pattern": "^sample\\." },
+              "references": { "maxItems": 0 }
+            }
+          },
+          "else": {
+            "properties": { "references": { "minItems": 1 } }
+          }
+        },
+        {
+          "if": { "properties": { "section": { "const": "parquet" } } },
+          "then": { "properties": { "id": { "pattern": "^parquet\\." } } }
+        },
+        {
+          "if": { "properties": { "section": { "const": "geoparquet" } } },
+          "then": { "properties": { "id": { "pattern": "^geoparquet\\." } } }
+        },
+        {
+          "if": {
+            "properties": { "section": { "const": "geoparquet_best_practices" } }
+          },
+          "then": { "properties": { "id": { "pattern": "^bp\\." } } }
+        },
+        {
+          "if": { "properties": { "section": { "const": "stac_geoparquet" } } },
+          "then": { "properties": { "id": { "pattern": "^stac\\." } } }
+        },
+        {
+          "if": {
+            "properties": {
+              "section": { "const": "stac_geoparquet_best_practices" }
+            }
+          },
+          "then": { "properties": { "id": { "pattern": "^stacbp\\." } } }
+        }
+      ]
+    },
+    "retired": {
+      "type": "object",
+      "required": ["id", "retired", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "retired": { "type": "string", "format": "date" },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

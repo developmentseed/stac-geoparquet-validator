@@ -1,5 +1,6 @@
 import {
   Alert,
+  Box,
   Container,
   Heading,
   HStack,
@@ -14,6 +15,7 @@ import { upload, validate } from "./api";
 import { Footer } from "./components/Footer";
 import { HrefForm } from "./components/HrefForm";
 import { Report } from "./components/Report";
+import { RulesDialog } from "./components/RulesDialog";
 import { UploadButton } from "./components/UploadButton";
 import type { Report as ReportData } from "./types";
 
@@ -92,6 +94,9 @@ export default function App() {
           <HStack gap="3">
             <Image src="/logo.png" alt="" boxSize="10" />
             <Heading size="2xl">stac-geoparquet validator</Heading>
+            <Box ms="auto">
+              <RulesDialog />
+            </Box>
           </HStack>
           <Text color="fg.muted">
             Validates{" "}

@@ -9,7 +9,7 @@ A web tool and public API that takes a [stac-geoparquet](https://github.com/radi
 - `backend/`: Rust validator, built directly as an AWS Lambda
 - `frontend/`: Single-page web application
 - `infra/`: AWS CDK app (TypeScript)
-- `docs/checks.md`: the checks used by the validator (the public contract)
+- `backend/checks.json`: the checks used by the validator (the public contract), served at `GET /api/checks`
 
 ## Local development
 
@@ -79,7 +79,19 @@ Responds with a report:
 }
 ```
 
-Finding ids are stable and listed in [docs/checks.md](docs/checks.md); messages are free text.
+Finding ids are stable and listed by `GET /api/checks`; messages are free text.
+
+### `GET /api/checks`
+
+Lists every check id the validator can emit, with its severity, section, description and links to the upstream text it implements, plus the source document for each section and any retired ids. The format is chosen from the `Accept` header:
+
+| `Accept` | Response |
+| --- | --- |
+| `application/json`, `*/*` or none | JSON matching [`backend/checks.schema.json`](backend/checks.schema.json) |
+| `text/markdown`, `text/plain` or `text/*` | Markdown |
+| `text/html` (e.g. a browser) | HTML |
+
+Anything else gets a `406`.
 
 ### `POST /api/uploads`
 

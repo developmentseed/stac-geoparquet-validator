@@ -23,6 +23,8 @@ lambda_http = "1"
 aws-config = "1"
 aws-sdk-s3 = "1"
 uuid = { version = "1", features = ["v4"] }
+num-format = "0.4.4"
+askama = "0.16.1"
 
 [dev-dependencies]
 arrow = "60"
