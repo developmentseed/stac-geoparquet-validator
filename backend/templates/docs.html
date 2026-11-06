@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>stac-geoparquet validator API</title>
+<link rel="icon" href="/favicon.png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@{{ version }}/swagger-ui.css" integrity="{{ css_integrity }}" crossorigin="anonymous">
+<style>body { margin: 0; background: #fff; }</style>
+</head>
+<body>
+<div id="swagger-ui"></div>
+<script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@{{ version }}/swagger-ui-bundle.js" integrity="{{ js_integrity }}" crossorigin="anonymous"></script>
+<script>
+window.ui = SwaggerUIBundle({
+  url: "{{ spec_url }}",
+  dom_id: "#swagger-ui",
+  deepLinking: true,
+});
+</script>
+</body>
+</html>

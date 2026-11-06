@@ -290,3 +290,27 @@ fn committed_openapi_json_is_up_to_date() {
         "backend/openapi.json is stale; run `cargo run --bin openapi > openapi.json` in backend/"
     );
 }
+
+#[tokio::test]
+async fn docs_render_swagger_ui_for_the_spec() {
+    let response = handle(request("GET", "/api/docs", ""), &state(false))
+        .await
+        .unwrap();
+    assert_eq!(response.status().as_u16(), 200);
+    assert!(
+        response.headers()["content-type"]
+            .to_str()
+            .unwrap()
+            .starts_with("text/html")
+    );
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let html = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(html.contains("swagger-ui-bundle.js"));
+    assert!(html.contains("/api/openapi.json"));
+}
+
+#[tokio::test]
+async fn openapi_lists_docs() {
+    let (_, _, body) = call(&state(false), request("GET", "/api/openapi.json", "")).await;
+    assert!(body["paths"]["/api/docs"]["get"].is_object());
+}

@@ -46,7 +46,7 @@ cd infra && yarn install && yarn test
 
 ## API
 
-The API is described by an OpenAPI 3.1 document at [`GET /api/openapi.json`](https://validate.stac-geoparquet.org/api/openapi.json), generated from the Rust types with [utoipa](https://github.com/juhaku/utoipa). A copy is committed at `backend/openapi.json` (regenerate it with `cargo run --bin openapi > openapi.json` in `backend/`), and the frontend's TypeScript types in `frontend/src/openapi.ts` are generated from it with `yarn generate`.
+Interactive docs (Swagger UI) are at [`/api/docs`](https://validate.stac-geoparquet.org/api/docs). The API is described by an OpenAPI 3.1 document at [`GET /api/openapi.json`](https://validate.stac-geoparquet.org/api/openapi.json), generated from the Rust types with [utoipa](https://github.com/juhaku/utoipa). A copy is committed at `backend/openapi.json` (regenerate it with `cargo run --bin openapi > openapi.json` in `backend/`), and the frontend's TypeScript types in `frontend/src/openapi.ts` are generated from it with `yarn generate`.
 
 ### `POST /api/validate`
 

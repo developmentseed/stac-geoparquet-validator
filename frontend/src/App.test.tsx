@@ -11,7 +11,11 @@ import App from "./App";
 import { upload, validate } from "./api";
 import type { Report } from "./types";
 
-vi.mock("./api", () => ({ upload: vi.fn(), validate: vi.fn() }));
+vi.mock("./api", () => ({
+  upload: vi.fn(),
+  validate: vi.fn(),
+  docsUrl: () => "/api/docs",
+}));
 
 const UPLOADED = "s3://uploads-bucket/uploads/1234/items.parquet";
 
@@ -86,4 +90,11 @@ it("validates a typed href after an upload", async () => {
   fireEvent.click(screen.getByRole("button", { name: /validate/i }));
   await waitFor(() => expect(validate).toHaveBeenLastCalledWith(href));
   expect(new URLSearchParams(window.location.search).get("href")).toBe(href);
+});
+
+it("links to the API docs", () => {
+  renderApp();
+  expect(screen.getByRole("link", { name: "API" }).getAttribute("href")).toBe(
+    "/api/docs",
+  );
 });

@@ -2,6 +2,7 @@
 
 use std::time::Duration;
 
+use askama::Template;
 use aws_sdk_s3::presigning::PresigningConfig;
 use lambda_http::{Body, Error, Request, Response, http::Method};
 use serde::{Deserialize, Serialize};
@@ -10,6 +11,11 @@ use utoipa::{OpenApi, ToSchema};
 use crate::catalog::Catalog;
 use crate::{Options, Report, catalog, validate_href};
 
+const SWAGGER_UI_VERSION: &str = "5.33.3";
+const SWAGGER_UI_CSS_INTEGRITY: &str =
+    "sha384-Ov4/wv3j2bmct8cDc5X4ngJZohVPzEmc6uDPH8WeljUxO5vtoykvMEfbu9Vh6RaW";
+const SWAGGER_UI_JS_INTEGRITY: &str =
+    "sha384-h00llMzD1afyNow1pDmnZKlHsUZgp9KE9HXLFXF2CvbwsBY0+WBO4f75SfGwvM4K";
 const MAX_UPLOAD_SIZE: u64 = 2 * 1024 * 1024 * 1024;
 const UPLOAD_EXPIRY: Duration = Duration::from_secs(15 * 60);
 
@@ -32,7 +38,7 @@ pub struct State {
     ),
     servers((url = "https://validate.stac-geoparquet.org", description = "Production")),
     security(()),
-    paths(checks, validate, uploads, openapi)
+    paths(checks, validate, uploads, openapi, docs)
 )]
 pub struct ApiDoc;
 
@@ -79,6 +85,7 @@ pub async fn handle(req: Request, state: &State) -> Result<Response<Body>, Error
         (&Method::OPTIONS, _) => json_response(204, None),
         (&Method::GET, "/api/checks") => checks(&req),
         (&Method::GET, "/api/openapi.json") => openapi(),
+        (&Method::GET, "/api/docs") => docs(),
         (&Method::POST, "/api/validate") => validate(req, state).await,
         (&Method::POST, "/api/uploads") => uploads(req, state).await,
         _ => error(404, "not found"),
@@ -336,6 +343,39 @@ pub fn openapi_json() -> String {
         .expect("the OpenAPI description serializes");
     text.push('\n');
     text
+}
+
+#[derive(Template)]
+#[template(path = "docs.html")]
+struct DocsPage {
+    version: &'static str,
+    css_integrity: &'static str,
+    js_integrity: &'static str,
+    spec_url: &'static str,
+}
+
+/// Renders the OpenAPI description with Swagger UI.
+#[utoipa::path(
+    get,
+    path = "/api/docs",
+    tag = "meta",
+    responses((status = 200, description = "An interactive page for exploring the API.", content_type = "text/html"))
+)]
+fn docs() -> Response<Body> {
+    let page = DocsPage {
+        version: SWAGGER_UI_VERSION,
+        css_integrity: SWAGGER_UI_CSS_INTEGRITY,
+        js_integrity: SWAGGER_UI_JS_INTEGRITY,
+        spec_url: "/api/openapi.json",
+    };
+    match page.render() {
+        Ok(html) => Response::builder()
+            .status(200)
+            .header("content-type", "text/html; charset=utf-8")
+            .body(Body::Text(html))
+            .expect("static response parts are valid"),
+        Err(_) => error(500, "failed to render the API docs"),
+    }
 }
 
 fn json_body(status: u16, value: &impl Serialize) -> Response<Body> {

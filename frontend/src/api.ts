@@ -2,6 +2,9 @@ import type { Catalog, Report, UploadResponse } from "./types";
 
 const base = (): string => import.meta.env.VITE_API_BASE ?? "";
 
+/** The URL of the interactive API docs. */
+export const docsUrl = (): string => `${base()}/api/docs`;
+
 /** The URL of the checks catalog, which renders as HTML in a browser. */
 export const checksUrl = (): string => `${base()}/api/checks`;
 

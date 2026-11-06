@@ -25,6 +25,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/docs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Renders the OpenAPI description with Swagger UI. */
+    get: operations["docs"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/openapi.json": {
     parameters: {
       query?: never;
@@ -274,6 +291,26 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  docs: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description An interactive page for exploring the API. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "text/html": unknown;
         };
       };
     };

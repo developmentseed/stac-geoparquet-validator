@@ -11,7 +11,7 @@ import {
   Text,
 } from "@chakra-ui/react";
 import { useEffect, useRef, useState } from "react";
-import { upload, validate } from "./api";
+import { docsUrl, upload, validate } from "./api";
 import { Footer } from "./components/Footer";
 import { HrefForm } from "./components/HrefForm";
 import { Report } from "./components/Report";
@@ -101,7 +101,9 @@ export default function App() {
           <Text color="fg.muted">
             Validates{" "}
             <Link href="https://stac-geoparquet.org/">stac-geoparquet</Link>{" "}
-            files. Find a bug or have a feature request? Open an{" "}
+            files, here or from your own code with the{" "}
+            <Link href={docsUrl()}>API</Link>. Find a bug or have a feature
+            request? Open an{" "}
             <Link href="https://github.com/developmentseed/stac-geoparquet-validator/issues">
               issue on Github
             </Link>

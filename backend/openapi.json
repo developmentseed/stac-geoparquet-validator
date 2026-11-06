@@ -72,6 +72,23 @@
         }
       }
     },
+    "/api/docs": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "summary": "Renders the OpenAPI description with Swagger UI.",
+        "operationId": "docs",
+        "responses": {
+          "200": {
+            "description": "An interactive page for exploring the API.",
+            "content": {
+              "text/html": {}
+            }
+          }
+        }
+      }
+    },
     "/api/openapi.json": {
       "get": {
         "tags": [

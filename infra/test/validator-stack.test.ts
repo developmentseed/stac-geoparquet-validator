@@ -78,6 +78,7 @@ describe("ValidatorStack", () => {
     ).map((route) => route.Properties.RouteKey);
     expect(routeKeys.sort()).toEqual([
       "GET /api/checks",
+      "GET /api/docs",
       "GET /api/openapi.json",
       "OPTIONS /api/{proxy+}",
       "POST /api/uploads",
