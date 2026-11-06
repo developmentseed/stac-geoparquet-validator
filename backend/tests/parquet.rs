@@ -6,14 +6,18 @@ use object_store::{ObjectStoreExt, memory::InMemory, path::Path};
 use parquet::{
     basic::LogicalType, file::reader::FileReader, file::serialized_reader::SerializedFileReader,
 };
-use stac_geoparquet_validator::{Context, Finding};
+use stac_geoparquet_validator::{Context, Finding, Severity};
 use std::sync::Arc;
 
 async fn load(bytes: Bytes) -> Result<Context, Finding> {
+    load_at(bytes, "test.parquet").await
+}
+
+async fn load_at(bytes: Bytes, name: &str) -> Result<Context, Finding> {
     let store = Arc::new(InMemory::new());
-    let path = Path::from("test.parquet");
+    let path = Path::from(name);
     store.put(&path, bytes.into()).await.unwrap();
-    Context::load(store, path, "test.parquet".to_string()).await
+    Context::load(store, path, name.to_string()).await
 }
 
 fn count(findings: &[Finding], id: &str) -> usize {
@@ -35,6 +39,18 @@ async fn html_body_is_unreadable() {
         .await
         .unwrap_err();
     assert_eq!(finding.id, "parquet.unreadable");
+}
+
+#[tokio::test]
+async fn json_file_is_unreadable() {
+    let finding = load_at(
+        Bytes::from_static(b"{\"type\": \"Catalog\"}"),
+        "catalog.json",
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(finding.id, "parquet.unreadable");
+    assert_eq!(finding.severity, Severity::Error);
 }
 
 #[tokio::test]
