@@ -17,6 +17,7 @@ use std::{
 
 const MAX_FOOTER_LEN: u64 = 64 * 1024 * 1024;
 const REFERENCE: &str = "https://parquet.apache.org/docs/file-format/";
+const PARQUET_EXTENSIONS: [&str; 4] = ["parquet", "geoparquet", "pq", "parq"];
 
 /// Everything known about a file after reading its footer.
 #[derive(Debug)]
@@ -53,6 +54,19 @@ fn too_small(size: u64) -> Result<(), Finding> {
         )))
     } else {
         Ok(())
+    }
+}
+
+fn missing_magic(path: &Path) -> Finding {
+    let has_parquet_extension = path
+        .extension()
+        .is_some_and(|extension| PARQUET_EXTENSIONS.contains(&extension.to_lowercase().as_str()));
+    if has_parquet_extension {
+        unreadable(
+            "file has a Parquet extension but does not end with the PAR1 magic bytes, so it may be truncated or corrupt",
+        )
+    } else {
+        unreadable("not a Parquet file")
     }
 }
 
@@ -106,7 +120,7 @@ impl Context {
     ) -> Result<Context, Finding> {
         let (size, tail) = read_tail(store.as_ref(), &path).await?;
         if &tail[4..8] != b"PAR1" {
-            return Err(unreadable("file does not end with the PAR1 magic bytes"));
+            return Err(missing_magic(&path));
         }
         let footer_len = u64::from(u32::from_le_bytes([tail[0], tail[1], tail[2], tail[3]]));
         if footer_len > MAX_FOOTER_LEN || footer_len > size - 8 {
