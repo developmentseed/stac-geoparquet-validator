@@ -4,10 +4,11 @@ use std::time::Duration;
 
 use aws_sdk_s3::presigning::PresigningConfig;
 use lambda_http::{Body, Error, Request, Response, http::Method};
-use serde::Deserialize;
-use serde_json::json;
+use serde::{Deserialize, Serialize};
+use utoipa::{OpenApi, ToSchema};
 
-use crate::{Options, catalog, validate_href};
+use crate::catalog::Catalog;
+use crate::{Options, Report, catalog, validate_href};
 
 const MAX_UPLOAD_SIZE: u64 = 2 * 1024 * 1024 * 1024;
 const UPLOAD_EXPIRY: Duration = Duration::from_secs(15 * 60);
@@ -20,15 +21,55 @@ pub struct State {
     pub s3: Option<aws_sdk_s3::Client>,
 }
 
-#[derive(Deserialize)]
+/// The OpenAPI description of the HTTP API.
+#[derive(OpenApi)]
+#[openapi(
+    info(
+        title = "stac-geoparquet validator",
+        description = "Validates Parquet files against the GeoParquet and stac-geoparquet \
+                       specifications and their best practices. Findings carry stable check \
+                       ids; match on `id`, never on `message`."
+    ),
+    servers((url = "https://validate.stac-geoparquet.org", description = "Production")),
+    security(()),
+    paths(checks, validate, uploads, openapi)
+)]
+pub struct ApiDoc;
+
+/// A file to validate.
+#[derive(Deserialize, ToSchema)]
 struct ValidateRequest {
+    /// The file to validate: an `http(s)://` URL, or an `s3://` href from `/api/uploads`.
+    #[schema(example = "https://example.com/items.parquet")]
     href: String,
 }
 
-#[derive(Deserialize)]
+/// A file to upload.
+#[derive(Deserialize, ToSchema)]
 struct UploadRequest {
+    /// The file's name. Characters other than ASCII letters, digits, `.`, `_` and `-` are
+    /// replaced.
+    #[schema(example = "items.parquet")]
     filename: String,
+    /// The file's size in bytes, at most 2 GB.
+    #[schema(example = 123456)]
     size: u64,
+}
+
+/// Where to upload a file and how to validate it afterwards.
+#[derive(Serialize, ToSchema)]
+struct UploadResponse {
+    /// A presigned URL to `PUT` the file to. It expires after 15 minutes.
+    upload_url: String,
+    /// The href to pass to `/api/validate` once the upload finishes.
+    href: String,
+}
+
+/// An error.
+#[derive(Serialize, ToSchema)]
+struct ErrorResponse {
+    /// What went wrong.
+    error: String,
 }
 
 /// Routes a request to its handler and adds CORS headers to the response.
@@ -37,6 +78,7 @@ pub async fn handle(req: Request, state: &State) -> Result<Response<Body>, Error
     let response = match (req.method(), path.as_str()) {
         (&Method::OPTIONS, _) => json_response(204, None),
         (&Method::GET, "/api/checks") => checks(&req),
+        (&Method::GET, "/api/openapi.json") => openapi(),
         (&Method::POST, "/api/validate") => validate(req, state).await,
         (&Method::POST, "/api/uploads") => uploads(req, state).await,
         _ => error(404, "not found"),
@@ -128,6 +170,26 @@ fn negotiate(accept: Option<&str>) -> Option<Format> {
     best.map(|(format, _)| format)
 }
 
+/// Lists every check the validator can emit.
+///
+/// The format follows the `Accept` header: JSON by default, Markdown for `text/markdown`,
+/// `text/plain` or `text/*`, and HTML for `text/html`.
+#[utoipa::path(
+    get,
+    path = "/api/checks",
+    tag = "checks",
+    params(
+        ("accept" = Option<String>, Header, description = "The preferred format, e.g. `text/markdown`.")
+    ),
+    responses(
+        (status = 200, description = "The checks catalog.", content(
+            (Catalog = "application/json"),
+            (String = "text/markdown"),
+            (String = "text/html"),
+        )),
+        (status = 406, description = "None of the formats is acceptable.", body = ErrorResponse),
+    )
+)]
 fn checks(req: &Request) -> Response<Body> {
     let accept = req
         .headers()
@@ -156,6 +218,17 @@ fn checks(req: &Request) -> Response<Body> {
         .expect("static response parts are valid")
 }
 
+/// Validates a file and returns a report.
+#[utoipa::path(
+    post,
+    path = "/api/validate",
+    tag = "validate",
+    request_body = ValidateRequest,
+    responses(
+        (status = 200, description = "The validation report. An unreadable file still returns 200, with a `parquet.unreadable` finding.", body = Report),
+        (status = 400, description = "The body is not a valid request.", body = ErrorResponse),
+    )
+)]
 async fn validate(req: Request, state: &State) -> Response<Body> {
     let Ok(body) = serde_json::from_slice::<ValidateRequest>(req.body().as_ref()) else {
         return error(400, "body must be JSON like {\"href\": string}");
@@ -167,6 +240,21 @@ async fn validate(req: Request, state: &State) -> Response<Body> {
     }
 }
 
+/// Starts an upload.
+///
+/// `PUT` the file to `upload_url`, then pass `href` to `/api/validate`. Uploads are deleted
+/// after one day.
+#[utoipa::path(
+    post,
+    path = "/api/uploads",
+    tag = "validate",
+    request_body = UploadRequest,
+    responses(
+        (status = 200, description = "A presigned upload.", body = UploadResponse),
+        (status = 400, description = "The body is not a valid request, or the size or filename is invalid.", body = ErrorResponse),
+        (status = 503, description = "Uploads are not enabled.", body = ErrorResponse),
+    )
+)]
 async fn uploads(req: Request, state: &State) -> Response<Body> {
     let (Some(s3), Some(bucket)) = (&state.s3, &state.options.uploads_bucket) else {
         return error(503, "uploads are not enabled");
@@ -198,11 +286,13 @@ async fn uploads(req: Request, state: &State) -> Response<Body> {
     else {
         return error(500, "failed to presign upload");
     };
-    let value = json!({
-        "upload_url": presigned.uri(),
-        "href": format!("s3://{bucket}/{key}"),
-    });
-    json_response(200, Some(value.to_string()))
+    json_body(
+        200,
+        &UploadResponse {
+            upload_url: presigned.uri().to_string(),
+            href: format!("s3://{bucket}/{key}"),
+        },
+    )
 }
 
 fn sanitize(filename: &str) -> String {
@@ -220,7 +310,42 @@ fn sanitize(filename: &str) -> String {
 }
 
 fn error(status: u16, message: &str) -> Response<Body> {
-    json_response(status, Some(json!({"error": message}).to_string()))
+    json_body(
+        status,
+        &ErrorResponse {
+            error: message.to_string(),
+        },
+    )
+}
+
+/// Returns this OpenAPI description.
+#[utoipa::path(
+    get,
+    path = "/api/openapi.json",
+    tag = "meta",
+    responses((status = 200, description = "The OpenAPI description.", content_type = "application/json"))
+)]
+fn openapi() -> Response<Body> {
+    json_response(200, Some(openapi_json()))
+}
+
+/// Returns the OpenAPI description as pretty-printed JSON with a trailing newline.
+pub fn openapi_json() -> String {
+    let mut text = ApiDoc::openapi()
+        .to_pretty_json()
+        .expect("the OpenAPI description serializes");
+    text.push('\n');
+    text
+}
+
+fn json_body(status: u16, value: &impl Serialize) -> Response<Body> {
+    match serde_json::to_string(value) {
+        Ok(text) => json_response(status, Some(text)),
+        Err(_) => json_response(
+            500,
+            Some(r#"{"error":"failed to serialize response"}"#.to_string()),
+        ),
+    }
 }
 
 fn json_response(status: u16, body: Option<String>) -> Response<Body> {

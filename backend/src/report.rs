@@ -2,11 +2,12 @@
 
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
+use utoipa::ToSchema;
 
 const REPORT_VERSION: &str = "1";
 
 /// How serious a finding is, from most to least severe.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
     /// The file violates a requirement.
@@ -20,7 +21,7 @@ pub enum Severity {
 }
 
 /// The part of the specification a finding belongs to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Section {
     /// Basic Parquet readability.
@@ -36,7 +37,7 @@ pub enum Section {
 }
 
 /// A single result of a validation check.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct Finding {
     /// The stable check identifier.
     pub id: Cow<'static, str>,
@@ -70,7 +71,7 @@ impl Finding {
 }
 
 /// Number of findings per severity.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct Counts {
     /// Number of errors.
     pub error: usize,
@@ -83,13 +84,14 @@ pub struct Counts {
 }
 
 /// Overall validity, derived from the findings.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct Summary {
     /// True if there are no Parquet errors.
     pub parquet_valid: bool,
     /// True if the file is valid Parquet and has no GeoParquet errors.
     pub geoparquet_valid: bool,
     /// The GeoParquet version declared by the file, if any.
+    #[schema(required = true)]
     pub geoparquet_version: Option<String>,
     /// Whether the file uses native Parquet geospatial types.
     pub native_geospatial_types: bool,
@@ -100,7 +102,7 @@ pub struct Summary {
 }
 
 /// A complete validation report.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct Report {
     /// The report format version.
     pub report_version: Cow<'static, str>,

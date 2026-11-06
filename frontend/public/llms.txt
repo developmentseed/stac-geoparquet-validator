@@ -9,6 +9,7 @@ The web app takes the URL of a Parquet file (or an upload) and shows a report. P
 ## Docs
 
 - [Validator](https://validate.stac-geoparquet.org/): The web app. Add `?href=<url>` to validate a file directly.
+- [OpenAPI](https://validate.stac-geoparquet.org/api/openapi.json): The OpenAPI 3.1 description of the HTTP API, with request and response schemas.
 - [Checks](https://validate.stac-geoparquet.org/api/checks): Every check id, its severity and section, what it flags and the upstream reference. Request it with `Accept: text/markdown` for a Markdown version.
 
 ## Specifications

@@ -1,0 +1,562 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "stac-geoparquet validator",
+    "description": "Validates Parquet files against the GeoParquet and stac-geoparquet specifications and their best practices. Findings carry stable check ids; match on `id`, never on `message`.",
+    "license": {
+      "name": "MIT",
+      "identifier": "MIT"
+    },
+    "version": "0.1.0"
+  },
+  "servers": [
+    {
+      "url": "https://validate.stac-geoparquet.org",
+      "description": "Production"
+    }
+  ],
+  "paths": {
+    "/api/checks": {
+      "get": {
+        "tags": [
+          "checks"
+        ],
+        "summary": "Lists every check the validator can emit.",
+        "description": "The format follows the `Accept` header: JSON by default, Markdown for `text/markdown`,\n`text/plain` or `text/*`, and HTML for `text/html`.",
+        "operationId": "checks",
+        "parameters": [
+          {
+            "name": "accept",
+            "in": "header",
+            "description": "The preferred format, e.g. `text/markdown`.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The checks catalog.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Catalog"
+                }
+              },
+              "text/markdown": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "406": {
+            "description": "None of the formats is acceptable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/openapi.json": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "summary": "Returns this OpenAPI description.",
+        "operationId": "openapi",
+        "responses": {
+          "200": {
+            "description": "The OpenAPI description.",
+            "content": {
+              "application/json": {}
+            }
+          }
+        }
+      }
+    },
+    "/api/uploads": {
+      "post": {
+        "tags": [
+          "validate"
+        ],
+        "summary": "Starts an upload.",
+        "description": "`PUT` the file to `upload_url`, then pass `href` to `/api/validate`. Uploads are deleted\nafter one day.",
+        "operationId": "uploads",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "A presigned upload.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body is not a valid request, or the size or filename is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Uploads are not enabled.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/validate": {
+      "post": {
+        "tags": [
+          "validate"
+        ],
+        "summary": "Validates a file and returns a report.",
+        "operationId": "validate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The validation report. An unreadable file still returns 200, with a `parquet.unreadable` finding.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Report"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body is not a valid request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Catalog": {
+        "type": "object",
+        "description": "Every check the validator can emit, the documents they come from, and the ids that\nhave been retired.",
+        "required": [
+          "sections",
+          "checks",
+          "retired"
+        ],
+        "properties": {
+          "checks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CheckInfo"
+            },
+            "description": "The checks in the order they are documented."
+          },
+          "retired": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RetiredCheck"
+            },
+            "description": "Ids that are no longer emitted and must never be reused."
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SectionInfo"
+            },
+            "description": "The report sections and the upstream document each one encodes."
+          }
+        }
+      },
+      "CheckInfo": {
+        "type": "object",
+        "description": "One check id.",
+        "required": [
+          "id",
+          "severity",
+          "section",
+          "sampled",
+          "description",
+          "references"
+        ],
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "What the check flags. May contain `code` spans."
+          },
+          "id": {
+            "type": "string",
+            "description": "The stable check id."
+          },
+          "references": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Links to the upstream sections the check implements."
+          },
+          "sampled": {
+            "type": "boolean",
+            "description": "Whether the check reads a bounded sample of rows or row-group statistics."
+          },
+          "section": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Section",
+                "description": "The section of the check's findings, or `None` when it takes the section of\nanother check."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity",
+            "description": "The severity of the check's findings."
+          }
+        }
+      },
+      "Counts": {
+        "type": "object",
+        "description": "Number of findings per severity.",
+        "required": [
+          "error",
+          "warning",
+          "compat",
+          "info"
+        ],
+        "properties": {
+          "compat": {
+            "type": "integer",
+            "description": "Number of compatibility notes.",
+            "minimum": 0
+          },
+          "error": {
+            "type": "integer",
+            "description": "Number of errors.",
+            "minimum": 0
+          },
+          "info": {
+            "type": "integer",
+            "description": "Number of informational findings.",
+            "minimum": 0
+          },
+          "warning": {
+            "type": "integer",
+            "description": "Number of warnings.",
+            "minimum": 0
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "description": "An error.",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "What went wrong."
+          }
+        }
+      },
+      "Finding": {
+        "type": "object",
+        "description": "A single result of a validation check.",
+        "required": [
+          "id",
+          "severity",
+          "section",
+          "message",
+          "reference"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The stable check identifier."
+          },
+          "message": {
+            "type": "string",
+            "description": "A human-readable description."
+          },
+          "reference": {
+            "type": "string",
+            "description": "A link or citation for the relevant specification text."
+          },
+          "section": {
+            "$ref": "#/components/schemas/Section",
+            "description": "The specification section the check belongs to."
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity",
+            "description": "How serious the finding is."
+          }
+        }
+      },
+      "Report": {
+        "type": "object",
+        "description": "A complete validation report.",
+        "required": [
+          "report_version",
+          "href",
+          "summary",
+          "findings"
+        ],
+        "properties": {
+          "findings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Finding"
+            },
+            "description": "All findings, sorted by section and severity."
+          },
+          "href": {
+            "type": "string",
+            "description": "The href that was validated."
+          },
+          "report_version": {
+            "type": "string",
+            "description": "The report format version."
+          },
+          "summary": {
+            "$ref": "#/components/schemas/Summary",
+            "description": "The derived summary."
+          }
+        }
+      },
+      "RetiredCheck": {
+        "type": "object",
+        "description": "A check id that is no longer emitted.",
+        "required": [
+          "id",
+          "retired",
+          "reason"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The retired id."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why the id was retired."
+          },
+          "retired": {
+            "type": "string",
+            "description": "The date the id was retired, as `YYYY-MM-DD`."
+          }
+        }
+      },
+      "Section": {
+        "type": "string",
+        "description": "The part of the specification a finding belongs to.",
+        "enum": [
+          "parquet",
+          "geoparquet",
+          "geoparquet_best_practices",
+          "stac_geoparquet",
+          "stac_geoparquet_best_practices"
+        ]
+      },
+      "SectionInfo": {
+        "type": "object",
+        "description": "A report section and its upstream document.",
+        "required": [
+          "section",
+          "title",
+          "source"
+        ],
+        "properties": {
+          "section": {
+            "$ref": "#/components/schemas/Section",
+            "description": "The section."
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source",
+            "description": "The upstream document the section's checks come from."
+          },
+          "title": {
+            "type": "string",
+            "description": "A human-readable title."
+          }
+        }
+      },
+      "Severity": {
+        "type": "string",
+        "description": "How serious a finding is, from most to least severe.",
+        "enum": [
+          "error",
+          "warning",
+          "compat",
+          "info"
+        ]
+      },
+      "Source": {
+        "type": "object",
+        "description": "An upstream specification or best-practice document.",
+        "required": [
+          "title",
+          "href"
+        ],
+        "properties": {
+          "href": {
+            "type": "string",
+            "description": "A link to the document."
+          },
+          "title": {
+            "type": "string",
+            "description": "The document's title."
+          }
+        }
+      },
+      "Summary": {
+        "type": "object",
+        "description": "Overall validity, derived from the findings.",
+        "required": [
+          "parquet_valid",
+          "geoparquet_valid",
+          "geoparquet_version",
+          "native_geospatial_types",
+          "stac_geoparquet_valid",
+          "counts"
+        ],
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/Counts",
+            "description": "Finding counts by severity."
+          },
+          "geoparquet_valid": {
+            "type": "boolean",
+            "description": "True if the file is valid Parquet and has no GeoParquet errors."
+          },
+          "geoparquet_version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The GeoParquet version declared by the file, if any."
+          },
+          "native_geospatial_types": {
+            "type": "boolean",
+            "description": "Whether the file uses native Parquet geospatial types."
+          },
+          "parquet_valid": {
+            "type": "boolean",
+            "description": "True if there are no Parquet errors."
+          },
+          "stac_geoparquet_valid": {
+            "type": "boolean",
+            "description": "True if there are no Parquet, GeoParquet or stac-geoparquet errors."
+          }
+        }
+      },
+      "UploadRequest": {
+        "type": "object",
+        "description": "A file to upload.",
+        "required": [
+          "filename",
+          "size"
+        ],
+        "properties": {
+          "filename": {
+            "type": "string",
+            "description": "The file's name. Characters other than ASCII letters, digits, `.`, `_` and `-` are\nreplaced.",
+            "example": "items.parquet"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The file's size in bytes, at most 2 GB.",
+            "example": 123456,
+            "minimum": 0
+          }
+        }
+      },
+      "UploadResponse": {
+        "type": "object",
+        "description": "Where to upload a file and how to validate it afterwards.",
+        "required": [
+          "upload_url",
+          "href"
+        ],
+        "properties": {
+          "href": {
+            "type": "string",
+            "description": "The href to pass to `/api/validate` once the upload finishes."
+          },
+          "upload_url": {
+            "type": "string",
+            "description": "A presigned URL to `PUT` the file to. It expires after 15 minutes."
+          }
+        }
+      },
+      "ValidateRequest": {
+        "type": "object",
+        "description": "A file to validate.",
+        "required": [
+          "href"
+        ],
+        "properties": {
+          "href": {
+            "type": "string",
+            "description": "The file to validate: an `http(s)://` URL, or an `s3://` href from `/api/uploads`.",
+            "example": "https://example.com/items.parquet"
+          }
+        }
+      }
+    }
+  },
+  "security": [
+    {}
+  ]
+}

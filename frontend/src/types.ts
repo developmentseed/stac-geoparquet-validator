@@ -1,74 +1,19 @@
-export type Severity = "error" | "warning" | "compat" | "info";
+import type { components } from "./openapi";
 
-export type Section =
-  | "parquet"
-  | "geoparquet"
-  | "geoparquet_best_practices"
-  | "stac_geoparquet"
-  | "stac_geoparquet_best_practices";
+type Schemas = components["schemas"];
 
-export interface Finding {
-  id: string;
-  severity: Severity;
-  section: Section;
-  message: string;
-  reference: string;
-}
-
-export interface Counts {
-  error: number;
-  warning: number;
-  compat: number;
-  info: number;
-}
-
-export interface Summary {
-  parquet_valid: boolean;
-  geoparquet_valid: boolean;
-  geoparquet_version: string | null;
-  native_geospatial_types: boolean;
-  stac_geoparquet_valid: boolean;
-  counts: Counts;
-}
-
-export interface Report {
-  report_version: "1";
-  href: string;
-  summary: Summary;
-  findings: Finding[];
-}
-
-export interface Source {
-  title: string;
-  href: string;
-}
-
-export interface SectionInfo {
-  section: Section;
-  title: string;
-  source: Source;
-}
-
-export interface CheckInfo {
-  id: string;
-  severity: Severity;
-  section: Section | null;
-  sampled: boolean;
-  description: string;
-  references: string[];
-}
-
-export interface RetiredCheck {
-  id: string;
-  retired: string;
-  reason: string;
-}
-
-export interface Catalog {
-  sections: SectionInfo[];
-  checks: CheckInfo[];
-  retired: RetiredCheck[];
-}
+export type Severity = Schemas["Severity"];
+export type Section = Schemas["Section"];
+export type Finding = Schemas["Finding"];
+export type Counts = Schemas["Counts"];
+export type Summary = Schemas["Summary"];
+export type Report = Schemas["Report"];
+export type Source = Schemas["Source"];
+export type SectionInfo = Schemas["SectionInfo"];
+export type CheckInfo = Schemas["CheckInfo"];
+export type RetiredCheck = Schemas["RetiredCheck"];
+export type Catalog = Schemas["Catalog"];
+export type UploadResponse = Schemas["UploadResponse"];
 
 export const SECTIONS: { section: Section; heading: string }[] = [
   { section: "parquet", heading: "Parquet" },
