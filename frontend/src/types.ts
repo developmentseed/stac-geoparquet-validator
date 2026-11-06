@@ -38,6 +38,38 @@ export interface Report {
   findings: Finding[];
 }
 
+export interface Source {
+  title: string;
+  href: string;
+}
+
+export interface SectionInfo {
+  section: Section;
+  title: string;
+  source: Source;
+}
+
+export interface CheckInfo {
+  id: string;
+  severity: Severity;
+  section: Section | null;
+  sampled: boolean;
+  description: string;
+  references: string[];
+}
+
+export interface RetiredCheck {
+  id: string;
+  retired: string;
+  reason: string;
+}
+
+export interface Catalog {
+  sections: SectionInfo[];
+  checks: CheckInfo[];
+  retired: RetiredCheck[];
+}
+
 export const SECTIONS: { section: Section; heading: string }[] = [
   { section: "parquet", heading: "Parquet" },
   { section: "geoparquet", heading: "GeoParquet" },

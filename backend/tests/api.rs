@@ -143,7 +143,10 @@ async fn filename_sanitized() {
 async fn cors_headers_present() {
     let (_, headers, _) = call(&state(false), request("POST", "/api/validate", "nope")).await;
     assert_eq!(headers["access-control-allow-origin"], "*");
-    assert_eq!(headers["access-control-allow-methods"], "POST, OPTIONS");
+    assert_eq!(
+        headers["access-control-allow-methods"],
+        "GET, POST, OPTIONS"
+    );
     assert_eq!(headers["access-control-allow-headers"], "content-type");
 }
 
@@ -158,5 +161,83 @@ async fn options_204() {
 async fn unknown_404() {
     let (status, headers, _) = call(&state(false), request("GET", "/api/nope", "")).await;
     assert_eq!(status, 404);
+    assert_eq!(headers["access-control-allow-origin"], "*");
+}
+
+async fn get_checks(accept: Option<&str>) -> (u16, http::HeaderMap, String) {
+    let mut builder = http::Request::builder().method("GET").uri("/api/checks");
+    if let Some(accept) = accept {
+        builder = builder.header("accept", accept);
+    }
+    let req = builder.body(Body::Empty).unwrap();
+    let response = handle(req, &state(false)).await.unwrap();
+    let status = response.status().as_u16();
+    let headers = response.headers().clone();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    (status, headers, String::from_utf8(bytes.to_vec()).unwrap())
+}
+
+fn content_type(headers: &http::HeaderMap) -> &str {
+    headers["content-type"].to_str().unwrap()
+}
+
+#[tokio::test]
+async fn checks_default_to_json() {
+    let (status, headers, body) = get_checks(None).await;
+    assert_eq!(status, 200);
+    assert_eq!(content_type(&headers), "application/json");
+    assert_eq!(headers["vary"], "accept");
+    let value: Value = serde_json::from_str(&body).unwrap();
+    assert!(!value["checks"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn checks_as_json() {
+    let (status, headers, body) = get_checks(Some("application/json")).await;
+    assert_eq!(status, 200);
+    assert_eq!(content_type(&headers), "application/json");
+    let value: Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(value["checks"][0]["id"], "parquet.unreadable");
+}
+
+#[tokio::test]
+async fn checks_as_markdown_for_text() {
+    for accept in ["text/plain", "text/markdown", "text/*"] {
+        let (status, headers, body) = get_checks(Some(accept)).await;
+        assert_eq!(status, 200);
+        assert!(content_type(&headers).starts_with("text/markdown"));
+        assert!(body.contains("| `parquet.unreadable` |"));
+    }
+}
+
+#[tokio::test]
+async fn checks_as_html_for_browsers() {
+    let accept = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
+    let (status, headers, body) = get_checks(Some(accept)).await;
+    assert_eq!(status, 200);
+    assert!(content_type(&headers).starts_with("text/html"));
+    assert!(body.starts_with("<!doctype html>"));
+    assert!(body.contains("<code>parquet.unreadable</code>"));
+}
+
+#[tokio::test]
+async fn checks_respect_quality() {
+    let accept = "text/html;q=0.5, text/markdown";
+    let (_, headers, _) = get_checks(Some(accept)).await;
+    assert!(content_type(&headers).starts_with("text/markdown"));
+    let (_, headers, _) = get_checks(Some("application/json;q=0, */*")).await;
+    assert!(content_type(&headers).starts_with("text/markdown"));
+}
+
+#[tokio::test]
+async fn checks_wildcard_is_json() {
+    let (_, headers, _) = get_checks(Some("*/*")).await;
+    assert_eq!(content_type(&headers), "application/json");
+}
+
+#[tokio::test]
+async fn checks_unacceptable_406() {
+    let (status, headers, _) = get_checks(Some("image/png")).await;
+    assert_eq!(status, 406);
     assert_eq!(headers["access-control-allow-origin"], "*");
 }

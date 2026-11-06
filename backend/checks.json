@@ -1,0 +1,438 @@
+{
+  "$schema": "./checks.schema.json",
+  "sections": [
+    {
+      "section": "parquet",
+      "title": "Parquet",
+      "source": {
+        "title": "Apache Parquet file format",
+        "href": "https://parquet.apache.org/docs/file-format/"
+      }
+    },
+    {
+      "section": "geoparquet",
+      "title": "GeoParquet",
+      "source": {
+        "title": "GeoParquet specification",
+        "href": "https://github.com/opengeospatial/geoparquet/blob/main/format-specs/geoparquet.md"
+      }
+    },
+    {
+      "section": "geoparquet_best_practices",
+      "title": "GeoParquet best practices",
+      "source": {
+        "title": "Distributing GeoParquet",
+        "href": "https://github.com/opengeospatial/geoparquet/blob/main/format-specs/distributing-geoparquet.md"
+      }
+    },
+    {
+      "section": "stac_geoparquet",
+      "title": "stac-geoparquet",
+      "source": {
+        "title": "stac-geoparquet specification",
+        "href": "https://github.com/radiantearth/stac-geoparquet-spec/blob/main/stac-geoparquet-spec.md"
+      }
+    },
+    {
+      "section": "stac_geoparquet_best_practices",
+      "title": "stac-geoparquet best practices",
+      "source": {
+        "title": "stac-geoparquet best practices",
+        "href": "https://github.com/radiantearth/stac-geoparquet-spec/blob/main/docs/best-practices.md"
+      }
+    }
+  ],
+  "checks": [
+    {
+      "id": "parquet.unreadable",
+      "severity": "error",
+      "section": "parquet",
+      "sampled": false,
+      "description": "The file cannot be fetched, has bad magic bytes, an unparseable footer, or the read timed out.",
+      "references": [
+        "https://parquet.apache.org/docs/file-format/"
+      ]
+    },
+    {
+      "id": "parquet.info",
+      "severity": "info",
+      "section": "parquet",
+      "sampled": false,
+      "description": "Parquet format version, creator, row and row group counts, file size.",
+      "references": [
+        "https://parquet.apache.org/docs/file-format/"
+      ]
+    },
+    {
+      "id": "geoparquet.metadata_missing",
+      "severity": "error",
+      "section": "geoparquet",
+      "sampled": false,
+      "description": "The `geo` metadata key is missing.",
+      "references": [
+        "https://github.com/opengeospatial/geoparquet/blob/v2.0.0/format-specs/geoparquet.md#file-metadata"
+      ]
+    },
+    {
+      "id": "geoparquet.metadata_invalid_json",
+      "severity": "error",
+      "section": "geoparquet",
+      "sampled": false,
+      "description": "The `geo` metadata is not valid JSON.",
+      "references": [
+        "https://github.com/opengeospatial/geoparquet/blob/v2.0.0/format-specs/geoparquet.md#file-metadata"
+      ]
+    },
+    {
+      "id": "geoparquet.metadata_schema",
+      "severity": "error",
+      "section": "geoparquet",
+      "sampled": false,
+      "description": "The `geo` metadata fails the JSON Schema for its declared version.",
+      "references": [
+        "https://github.com/opengeospatial/geoparquet/blob/v2.0.0/format-specs/geoparquet.md#file-metadata"
+      ]
+    },
+    {
+      "id": "geoparquet.unknown_version",
+      "severity": "error",
+      "section": "geoparquet",
+      "sampled": false,
+      "description": "The declared GeoParquet version is not 1.0, 1.1 or 2.0.",
+      "references": [
+        "https://github.com/opengeospatial/geoparquet/blob/v2.0.0/format-specs/geoparquet.md#version-and-schema"
+      ]
+    },
+    {
+      "id": "geoparquet.primary_column_missing",
+      "severity": "error",
+      "section": "geoparquet",
+      "sampled": false,
+      "description": "`primary_column` is not in `columns`.",
+      "references": [
+        "https://github.com/opengeospatial/geoparquet/blob/v2.0.0/format-specs/geoparquet.md#file-metadata"
+      ]
+    },
+    {
+      "id": "geoparquet.column_missing",
+      "severity": "error",
+      "section": "geoparquet",
+      "sampled": false,
+      "description": "A geometry column listed in the metadata is missing from the schema.",
+      "references": [
+        "https://github.com/opengeospatial/geoparquet/blob/v2.0.0/format-specs/geoparquet.md#column-metadata"
+      ]
+    },
+    {
+      "id": "geoparquet.column_nested",
+      "severity": "error",
+      "section": "geoparquet",
+      "sampled": false,
+      "description": "A geometry column is nested.",
+      "references": [
+        "https://github.com/opengeospatial/geoparquet/blob/v2.0.0/format-specs/geoparquet.md#nesting"
+      ]
+    },
+    {
+      "id": "geoparquet.column_repeated",
+      "severity": "error",
+      "section": "geoparquet",
+      "sampled": false,
+      "description": "A geometry column is repeated.",
+      "references": [
+        "https://github.com/opengeospatial/geoparquet/blob/v2.0.0/format-specs/geoparquet.md#repetition"
+      ]
+    },
+    {
+      "id": "geoparquet.encoding",
+      "severity": "error",
+      "section": "geoparquet",
+      "sampled": false,
+      "description": "The encoding is invalid for the declared version.",
+      "references": [
+        "https://github.com/opengeospatial/geoparquet/blob/v2.0.0/format-specs/geoparquet.md#encoding"
+      ]
+    },
+    {
+      "id": "geoparquet.crs_mismatch",
+      "severity": "error",
+      "section": "geoparquet",
+      "sampled": false,
+      "description": "The `geo` CRS contradicts the native logical-type CRS (any version).",
+      "references": [
+        "https://github.com/opengeospatial/geoparquet/blob/v2.0.0/format-specs/geoparquet.md#crs-parquet-property"
+      ]
+    },
+    {
+      "id": "geoparquet.geometry_types_duplicate",
+      "severity": "error",
+      "section": "geoparquet",
+      "sampled": false,
+      "description": "Duplicate values in `geometry_types`.",
+      "references": [
+        "https://github.com/opengeospatial/geoparquet/blob/v2.0.0/format-specs/geoparquet.md#geometry_types"
+      ]
+    },
+    {
+      "id": "geoparquet.covering_invalid",
+      "severity": "error",
+      "section": "geoparquet",
+      "sampled": false,
+      "description": "The bbox covering is malformed.",
+      "references": [
+        "https://github.com/opengeospatial/geoparquet/blob/v2.0.0/format-specs/geoparquet.md#covering"
+      ]
+    },
+    {
+      "id": "geoparquet.native_types",
+      "severity": "compat",
+      "section": "geoparquet",
+      "sampled": false,
+      "description": "Native `GEOMETRY`/`GEOGRAPHY` logical types, which some readers cannot handle.",
+      "references": [
+        "https://github.com/opengeospatial/geoparquet/blob/v2.0.0/format-specs/geoparquet.md#geometry-columns"
+      ]
+    },
+    {
+      "id": "geoparquet.native_without_metadata",
+      "severity": "warning",
+      "section": "geoparquet",
+      "sampled": false,
+      "description": "Native geospatial types without `geo` metadata.",
+      "references": [
+        "https://github.com/opengeospatial/geoparquet/blob/v2.0.0/format-specs/geoparquet.md#metadata"
+      ]
+    },
+    {
+      "id": "geoparquet.info",
+      "severity": "info",
+      "section": "geoparquet",
+      "sampled": false,
+      "description": "GeoParquet version, geometry types, CRS and bbox.",
+      "references": [
+        "https://github.com/opengeospatial/geoparquet/blob/v2.0.0/format-specs/geoparquet.md#column-metadata"
+      ]
+    },
+    {
+      "id": "geoparquet.geometry_types_mismatch",
+      "severity": "warning",
+      "section": "geoparquet",
+      "sampled": true,
+      "description": "`geometry_types` does not match the geometries seen in the sample.",
+      "references": [
+        "https://github.com/opengeospatial/geoparquet/blob/v2.0.0/format-specs/geoparquet.md#geometry_types"
+      ]
+    },
+    {
+      "id": "bp.compression",
+      "severity": "warning",
+      "section": "geoparquet_best_practices",
+      "sampled": false,
+      "description": "Compression is not zstd.",
+      "references": [
+        "https://github.com/opengeospatial/geoparquet/blob/main/format-specs/distributing-geoparquet.md#compression"
+      ]
+    },
+    {
+      "id": "bp.row_group_size",
+      "severity": "warning",
+      "section": "geoparquet_best_practices",
+      "sampled": false,
+      "description": "Row group size is outside 50k to 150k rows.",
+      "references": [
+        "https://github.com/opengeospatial/geoparquet/blob/main/format-specs/distributing-geoparquet.md#row-group-size"
+      ]
+    },
+    {
+      "id": "bp.version",
+      "severity": "warning",
+      "section": "geoparquet_best_practices",
+      "sampled": false,
+      "description": "GeoParquet 1.0, or 1.1 without a bbox covering.",
+      "references": [
+        "https://github.com/opengeospatial/geoparquet/blob/main/format-specs/distributing-geoparquet.md#efficient-spatial-access"
+      ]
+    },
+    {
+      "id": "bp.file_size",
+      "severity": "warning",
+      "section": "geoparquet_best_practices",
+      "sampled": false,
+      "description": "The file is larger than about 2 GB.",
+      "references": [
+        "https://github.com/opengeospatial/geoparquet/blob/main/format-specs/distributing-geoparquet.md#spatial-partitioning"
+      ]
+    },
+    {
+      "id": "bp.extension",
+      "severity": "warning",
+      "section": "geoparquet_best_practices",
+      "sampled": false,
+      "description": "The file uses a `.geoparquet` extension.",
+      "references": [
+        "https://github.com/opengeospatial/geoparquet/blob/main/format-specs/geoparquet.md#file-extension"
+      ]
+    },
+    {
+      "id": "bp.spatial_order",
+      "severity": "warning",
+      "section": "geoparquet_best_practices",
+      "sampled": true,
+      "description": "The file does not look spatially ordered.",
+      "references": [
+        "https://github.com/opengeospatial/geoparquet/blob/main/format-specs/distributing-geoparquet.md#spatial-ordering"
+      ]
+    },
+    {
+      "id": "stac.column_missing",
+      "severity": "error",
+      "section": "stac_geoparquet",
+      "sampled": false,
+      "description": "A required column is missing.",
+      "references": [
+        "https://github.com/radiantearth/stac-geoparquet-spec/blob/main/stac-geoparquet-spec.md#guidelines"
+      ]
+    },
+    {
+      "id": "stac.column_type",
+      "severity": "error",
+      "section": "stac_geoparquet",
+      "sampled": false,
+      "description": "A column has the wrong type.",
+      "references": [
+        "https://github.com/radiantearth/stac-geoparquet-spec/blob/main/stac-geoparquet-spec.md#guidelines",
+        "https://github.com/radiantearth/stac-geoparquet-spec/blob/main/stac-geoparquet-spec.md#link-struct",
+        "https://github.com/radiantearth/stac-geoparquet-spec/blob/main/stac-geoparquet-spec.md#asset-struct"
+      ]
+    },
+    {
+      "id": "stac.geoparquet_metadata_missing",
+      "severity": "error",
+      "section": "stac_geoparquet",
+      "sampled": false,
+      "description": "The `geo` metadata key is missing; stac-geoparquet files must be valid GeoParquet with proper metadata, even when they use native geospatial types.",
+      "references": [
+        "https://github.com/radiantearth/stac-geoparquet-spec/blob/main/stac-geoparquet-spec.md#guidelines"
+      ]
+    },
+    {
+      "id": "stac.crs",
+      "severity": "error",
+      "section": "stac_geoparquet",
+      "sampled": false,
+      "description": "The geometry CRS is not OGC:CRS84.",
+      "references": [
+        "https://github.com/radiantearth/stac-geoparquet-spec/blob/main/stac-geoparquet-spec.md#guidelines"
+      ]
+    },
+    {
+      "id": "stac.metadata_missing",
+      "severity": "error",
+      "section": "stac_geoparquet",
+      "sampled": false,
+      "description": "The `stac-geoparquet` metadata key is missing.",
+      "references": [
+        "https://github.com/radiantearth/stac-geoparquet-spec/blob/main/stac-geoparquet-spec.md#parquet-metadata"
+      ]
+    },
+    {
+      "id": "stac.metadata_schema",
+      "severity": "error",
+      "section": "stac_geoparquet",
+      "sampled": false,
+      "description": "The `stac-geoparquet` metadata is not JSON or fails its schema.",
+      "references": [
+        "https://github.com/radiantearth/stac-geoparquet-spec/blob/main/stac-geoparquet-spec.md#parquet-metadata"
+      ]
+    },
+    {
+      "id": "stac.version",
+      "severity": "error",
+      "section": "stac_geoparquet",
+      "sampled": false,
+      "description": "The `stac-geoparquet` version is missing or unsupported.",
+      "references": [
+        "https://github.com/radiantearth/stac-geoparquet-spec/blob/main/stac-geoparquet-spec.md#parquet-metadata"
+      ]
+    },
+    {
+      "id": "stac.collection_id_mismatch",
+      "severity": "error",
+      "section": "stac_geoparquet",
+      "sampled": false,
+      "description": "A `collections` key differs from its collection's `id`.",
+      "references": [
+        "https://github.com/radiantearth/stac-geoparquet-spec/blob/main/stac-geoparquet-spec.md#stac-collection-objects"
+      ]
+    },
+    {
+      "id": "stac.deprecated_collection",
+      "severity": "warning",
+      "section": "stac_geoparquet",
+      "sampled": false,
+      "description": "The deprecated `collection` key is used.",
+      "references": [
+        "https://github.com/radiantearth/stac-geoparquet-spec/blob/main/stac-geoparquet-spec.md#stac-collection-objects"
+      ]
+    },
+    {
+      "id": "stac.type_column",
+      "severity": "warning",
+      "section": "stac_geoparquet",
+      "sampled": false,
+      "description": "A `type` column is present.",
+      "references": [
+        "https://github.com/radiantearth/stac-geoparquet-spec/blob/main/stac-geoparquet-spec.md#guidelines"
+      ]
+    },
+    {
+      "id": "stac.duplicate_id",
+      "severity": "error",
+      "section": "stac_geoparquet",
+      "sampled": true,
+      "description": "Duplicate `id`s within a collection in the sample.",
+      "references": [
+        "https://github.com/radiantearth/stac-geoparquet-spec/blob/main/stac-geoparquet-spec.md#guidelines"
+      ]
+    },
+    {
+      "id": "stacbp.spatiotemporal_order",
+      "severity": "warning",
+      "section": "stac_geoparquet_best_practices",
+      "sampled": true,
+      "description": "The file is not spatio-temporally ordered.",
+      "references": [
+        "https://github.com/radiantearth/stac-geoparquet-spec/blob/main/docs/best-practices.md#use-spatio-temporal-ordering"
+      ]
+    },
+    {
+      "id": "stacbp.id_prefix",
+      "severity": "warning",
+      "section": "stac_geoparquet_best_practices",
+      "sampled": true,
+      "description": "Ids are not prefixed with an ordering key.",
+      "references": [
+        "https://github.com/radiantearth/stac-geoparquet-spec/blob/main/docs/best-practices.md#prefix-item-ids-with-the-spatio-temporal-ordering-key"
+      ]
+    },
+    {
+      "id": "stacbp.hive_partitioning",
+      "severity": "info",
+      "section": "stac_geoparquet_best_practices",
+      "sampled": false,
+      "description": "Hive partitioning detected in the path.",
+      "references": [
+        "https://github.com/radiantearth/stac-geoparquet-spec/blob/main/docs/best-practices.md#partitioning"
+      ]
+    },
+    {
+      "id": "sample.skipped",
+      "severity": "info",
+      "section": null,
+      "sampled": false,
+      "description": "A sampled check was skipped because the sample could not be read: the time budget ran out, even the first row group's sampled columns exceed the 128 MiB read budget, or the rows could not be read. Its reference is that of the skipped check.",
+      "references": []
+    }
+  ],
+  "retired": []
+}

@@ -1,13 +1,11 @@
-import type { Report } from "./types";
+import type { Catalog, Report } from "./types";
 
 const base = (): string => import.meta.env.VITE_API_BASE ?? "";
 
-async function postJson<T>(path: string, body: unknown): Promise<T> {
-  const response = await fetch(`${base()}${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
+/** The URL of the checks catalog, which renders as HTML in a browser. */
+export const checksUrl = (): string => `${base()}/api/checks`;
+
+async function parse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let message = `request failed with status ${response.status}`;
     try {
@@ -17,6 +15,23 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
     throw new Error(message);
   }
   return (await response.json()) as T;
+}
+
+async function postJson<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(`${base()}${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return parse<T>(response);
+}
+
+/** Fetches the catalog of every check the validator can emit. */
+export async function checks(): Promise<Catalog> {
+  const response = await fetch(checksUrl(), {
+    headers: { accept: "application/json" },
+  });
+  return parse<Catalog>(response);
 }
 
 /** Validates the file at `href` and returns the report. */

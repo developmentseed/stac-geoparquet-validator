@@ -81,6 +81,11 @@ export class ValidatorStack extends Stack {
       handler,
     );
     api.addRoutes({
+      path: "/api/checks",
+      methods: [apigw.HttpMethod.GET],
+      integration,
+    });
+    api.addRoutes({
       path: "/api/validate",
       methods: [apigw.HttpMethod.POST],
       integration,

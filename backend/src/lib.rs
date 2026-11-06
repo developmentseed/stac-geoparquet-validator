@@ -1,6 +1,7 @@
 //! Validate stac-geoparquet files.
 
 pub mod api;
+pub mod catalog;
 pub mod checks;
 mod context;
 pub mod geo;

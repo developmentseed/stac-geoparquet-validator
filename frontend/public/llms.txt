@@ -1,0 +1,23 @@
+# stac-geoparquet validator
+
+> Validates Parquet files against the GeoParquet and stac-geoparquet specifications and their best practices, and reports findings with stable check ids, severities and links to the upstream text each check implements.
+
+The web app takes the URL of a Parquet file (or an upload) and shows a report. Programs can call the same HTTP API: `POST /api/validate` with JSON like `{"href": "https://example.com/items.parquet"}` returns a JSON report whose findings each carry an `id`, `severity` (`error`, `warning`, `compat` or `info`), `section`, free-text `message` and `reference` URL. Match on `id`, never on `message`.
+
+`GET /api/checks` lists every check id. It uses content negotiation on the `Accept` header: send `Accept: text/markdown` (or `text/plain`) for Markdown, `application/json` for JSON, or `text/html` for a web page.
+
+## Docs
+
+- [Validator](https://validate.stac-geoparquet.org/): The web app. Add `?href=<url>` to validate a file directly.
+- [Checks](https://validate.stac-geoparquet.org/api/checks): Every check id, its severity and section, what it flags and the upstream reference. Request it with `Accept: text/markdown` for a Markdown version.
+
+## Specifications
+
+- [stac-geoparquet specification](https://github.com/radiantearth/stac-geoparquet-spec/blob/main/stac-geoparquet-spec.md): The `stac.*` checks.
+- [stac-geoparquet best practices](https://github.com/radiantearth/stac-geoparquet-spec/blob/main/docs/best-practices.md): The `stacbp.*` checks.
+- [GeoParquet specification](https://github.com/opengeospatial/geoparquet/blob/main/format-specs/geoparquet.md): The `geoparquet.*` checks.
+- [Distributing GeoParquet](https://github.com/opengeospatial/geoparquet/blob/main/format-specs/distributing-geoparquet.md): The `bp.*` checks.
+
+## Optional
+
+- [Source code](https://github.com/developmentseed/stac-geoparquet-validator): The validator's repository, including the JSON Schema for the checks catalog at `backend/checks.schema.json`.

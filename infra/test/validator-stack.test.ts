@@ -77,6 +77,7 @@ describe("ValidatorStack", () => {
       template.findResources("AWS::ApiGatewayV2::Route"),
     ).map((route) => route.Properties.RouteKey);
     expect(routeKeys.sort()).toEqual([
+      "GET /api/checks",
       "OPTIONS /api/{proxy+}",
       "POST /api/uploads",
       "POST /api/validate",

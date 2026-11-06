@@ -1,0 +1,58 @@
+{%- macro inline(spans) -%}
+{%- for span in spans.iter() -%}
+{%- if span.code -%}<code>{{ span.text }}</code>{%- else -%}{{ span.text }}{%- endif -%}
+{%- endfor -%}
+{%- endmacro -%}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ page.title }}</title>
+<style>
+:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+body { max-width: 72rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+table { border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid #8884; padding: 0.4rem; text-align: left; vertical-align: top; }
+td { overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+<h1>{{ page.title }}</h1>
+{% for paragraph in page.intro -%}
+<p>{% call inline(paragraph.spans) %}{% endcall %}</p>
+{% endfor -%}
+<h2>Sources</h2>
+<ul>
+{% for source in page.sources -%}
+<li><code>{{ source.section }}</code>: <a href="{{ source.href }}">{{ source.title }}</a></li>
+{% endfor -%}
+</ul>
+<h2>Checks</h2>
+<table>
+<thead><tr><th>id</th><th>severity</th><th>section</th><th>what it flags</th><th>reference</th></tr></thead>
+<tbody>
+{% for check in page.checks -%}
+<tr id="{{ check.id }}">
+<td><code>{{ check.id }}</code>{% if check.sampled %} †{% endif %}</td>
+<td>{{ check.severity }}</td>
+<td>{% match check.section %}{% when Some(section) %}<code>{{ section }}</code>{% when None %}(section of the skipped check){% endmatch %}</td>
+<td>{% call inline(check.description.spans) %}{% endcall %}</td>
+<td>{% for reference in check.references %}{% if !loop.first %}<br>{% endif %}<a href="{{ reference }}">{{ reference }}</a>{% else %}(same as the skipped check){% endfor %}</td>
+</tr>
+{% endfor -%}
+</tbody>
+</table>
+{% if !page.retired.is_empty() -%}
+<h2>Retired ids</h2>
+<table>
+<thead><tr><th>id</th><th>retired</th><th>reason</th></tr></thead>
+<tbody>
+{% for check in page.retired -%}
+<tr><td><code>{{ check.id }}</code></td><td>{{ check.retired }}</td><td>{% call inline(check.reason.spans) %}{% endcall %}</td></tr>
+{% endfor -%}
+</tbody>
+</table>
+{% endif -%}
+</body>
+</html>

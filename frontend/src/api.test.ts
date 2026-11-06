@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { upload, validate } from "./api";
+import { checks, upload, validate } from "./api";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -25,6 +25,26 @@ describe("api", () => {
     expect(url).toBe("/api/validate");
     expect(init.method).toBe("POST");
     expect(init.body).toBe(JSON.stringify({ href: "https://x/y.parquet" }));
+  });
+
+  it("checks gets the catalog as json", async () => {
+    const catalog = { sections: [], checks: [], retired: [] };
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(catalog));
+    vi.stubGlobal("fetch", fetchMock);
+
+    expect(await checks()).toEqual(catalog);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/checks");
+    expect(init.headers.accept).toBe("application/json");
+  });
+
+  it("checks throws on an error response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse({ error: "bad" }, 500)),
+    );
+
+    await expect(checks()).rejects.toThrow();
   });
 
   it("validate throws on an error response", async () => {
