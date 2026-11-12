@@ -17,7 +17,7 @@
   },
   "devDependencies": {
     "@types/node": "^26",
-    "aws-cdk": "^2.1147.0",
+    "aws-cdk": "^2.1148.0",
     "prettier": "^3.9.10",
     "tsx": "^4.23.15",
     "typescript": "~7.0",
