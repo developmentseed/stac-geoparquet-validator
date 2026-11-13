@@ -19,11 +19,15 @@ describe("ValidatorStack", () => {
     fs.writeFileSync(path.join(siteDir, "index.html"), "<html></html>");
     const app = new App();
     const env = { account: "123456789012" };
-    const certificate = new CertificateStack(app, "Certificate", {
-      env: { ...env, region: "us-east-1" },
-      crossRegionReferences: true,
-    });
-    const stack = new ValidatorStack(app, "Validator", {
+    const certificate = new CertificateStack(
+      app,
+      "stac-geoparquet-validator-certificate",
+      {
+        env: { ...env, region: "us-east-1" },
+        crossRegionReferences: true,
+      },
+    );
+    const stack = new ValidatorStack(app, "stac-geoparquet-validator", {
       env: { ...env, region: "us-west-2" },
       crossRegionReferences: true,
       certificate: certificate.certificate,
